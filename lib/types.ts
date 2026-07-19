@@ -54,10 +54,6 @@ export type PDFSettings = {
   difficultyBadgeEnabled: boolean;
   topicBadgeEnabled: boolean;
 
-  // 5.4 Infographics
-  infographicsEnabled: boolean;
-  questionInfographics: Record<number, string>; // questionNumber → base64 data URL
-
   // 5.5 Social links
   socialLinks: {
     instagram: string;

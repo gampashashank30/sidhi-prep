@@ -266,10 +266,6 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
     ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${diffBadge}${topicBadge}</div>`
     : '';
 
-  const infoImg = (settings.infographicsEnabled && settings.questionInfographics[q.number])
-    ? `<div style="margin:5px 0 0 0;"><img src="${settings.questionInfographics[q.number]}" style="max-width:100%;height:auto;display:block;" /></div>`
-    : '';
-
   // The explanation link — targets #exp-N which is in document flow
   const expLink = `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`;
 
@@ -291,7 +287,6 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
       ${badgeRow || '<span></span>'}
       ${expLink}
     </div>
-    ${infoImg}
   </div>`;
 }
 
@@ -567,14 +562,18 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     body { transform-origin: top left; }
   ` : '';
 
+  // Skip Google Fonts in preview mode for speed — use system font stack instead
+  const fontLink = previewMode ? '' : `
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Siddhi Question Bank</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  ${fontLink}
   <style>
     /* ── Reset ── */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }

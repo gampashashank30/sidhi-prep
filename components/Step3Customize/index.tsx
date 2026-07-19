@@ -114,8 +114,8 @@ function LivePreview({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const debouncedSettings = useDebounce(settings, 200);
-  const debouncedQuestions = useDebounce(questions, 200);
+  const debouncedSettings = useDebounce(settings, 800);
+  const debouncedQuestions = useDebounce(questions, 400);
 
   useEffect(() => {
     if (debouncedQuestions.length === 0) return;
@@ -242,21 +242,6 @@ export default function Step3Customize() {
     update('adImages', [...pdfSettings.adImages, ...uploaded]);
   }, [pdfSettings.adImages, update]);
 
-  // ── Infographic upload ─────────────────────────────────────────────────────
-  const handleInfographicUpload = useCallback(async (questionNumber: number, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'infographic');
-    const res = await fetch('/api/upload-image', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.dataUrl) {
-      update('questionInfographics', {
-        ...pdfSettings.questionInfographics,
-        [questionNumber]: data.dataUrl,
-      });
-    }
-  }, [pdfSettings.questionInfographics, update]);
-
   // ── PDF generation ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
@@ -377,6 +362,7 @@ export default function Step3Customize() {
                     id="border-width"
                     type="range" min={1} max={6} step={0.5}
                     value={pdfSettings.borderWidthMm}
+                    style={{ ['--pct' as string]: `${((pdfSettings.borderWidthMm - 1) / (6 - 1)) * 100}%` }}
                     onChange={e => update('borderWidthMm', parseFloat(e.target.value))}
                   />
                 </div>
@@ -392,45 +378,6 @@ export default function Step3Customize() {
           }>
             <ToggleRow id="toggle-difficulty-badge" label="Difficulty Badge" description="Easy · Medium · Hard pill on each question" value={pdfSettings.difficultyBadgeEnabled} onChange={v => update('difficultyBadgeEnabled', v)} />
             <ToggleRow id="toggle-topic-badge" label="Topic Badge" description="Deepest subject path segment" value={pdfSettings.topicBadgeEnabled} onChange={v => update('topicBadgeEnabled', v)} />
-          </SettingsSection>
-
-          {/* 5.4 Infographics */}
-          <SettingsSection title="Infographics" icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-            </svg>
-          }>
-            <ToggleRow id="toggle-infographics" label="Per-Question Infographics" description="Attach an image to specific questions" value={pdfSettings.infographicsEnabled} onChange={v => update('infographicsEnabled', v)} />
-            {pdfSettings.infographicsEnabled && (
-              <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
-                {selectedQuestions.map(q => (
-                  <div key={q.number} className="flex items-center gap-3 p-2 rounded-lg border border-gray-100 bg-gray-50">
-                    <span className="text-xs font-bold text-[var(--primary)] w-6 flex-shrink-0">Q{q.number}</span>
-                    <span className="text-xs text-gray-600 flex-1 truncate">{q.text.slice(0, 40)}…</span>
-                    {pdfSettings.questionInfographics[q.number] ? (
-                      <div className="flex items-center gap-1">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={pdfSettings.questionInfographics[q.number]} alt="" className="w-8 h-6 object-cover rounded" />
-                        <button className="text-xs text-red-500 hover:text-red-700" onClick={() => {
-                          const next = { ...pdfSettings.questionInfographics };
-                          delete next[q.number];
-                          update('questionInfographics', next);
-                        }}>✕</button>
-                      </div>
-                    ) : (
-                      <label className="btn-ghost text-xs px-2 py-1 cursor-pointer">
-                        + Image
-                        <input type="file" accept="image/*" className="hidden" onChange={async e => {
-                          const f = e.target.files?.[0];
-                          if (f) await handleInfographicUpload(q.number, f);
-                          e.target.value = '';
-                        }} />
-                      </label>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </SettingsSection>
 
           {/* 5.5 Social Links */}

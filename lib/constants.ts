@@ -40,8 +40,6 @@ export const DEFAULT_PDF_SETTINGS = {
   borderWidthMm: 2,
   difficultyBadgeEnabled: true,
   topicBadgeEnabled: true,
-  infographicsEnabled: false,
-  questionInfographics: {},
   socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '' },
   adsEnabled: false,
   adImages: [],
