@@ -3,17 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
 import type { PDFSettings, AdImage } from '@/lib/types';
-
-// ─── Debounce hook ────────────────────────────────────────────────────────────
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
-}
+import { buildHTMLTemplate } from '@/lib/pdfTemplate';
 
 // ─── Toggle Row ───────────────────────────────────────────────────────────────
 
@@ -100,6 +90,26 @@ function isValidUrl(url: string): boolean {
 }
 
 // ─── Live Preview Pane ────────────────────────────────────────────────────────
+// Runs 100% client-side: buildHTMLTemplate is pure string manipulation with
+// zero Node.js dependencies. We call it directly in the browser — no network
+// round-trip, no server cold-start. Preview is now instant on Render too.
+
+/** Fetch /logo.png once and convert to a base64 data URL */
+async function fetchLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch('/logo.png');
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
 function LivePreview({
   settings,
@@ -111,45 +121,31 @@ function LivePreview({
   questions: import('@/lib/types').Question[];
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const logoRef = useRef<string | null>(null);
+  const [logoReady, setLogoReady] = useState(false);
 
-  const debouncedSettings = useDebounce(settings, 800);
-  const debouncedQuestions = useDebounce(questions, 400);
-
+  // Fetch logo once on mount and cache it
   useEffect(() => {
-    if (debouncedQuestions.length === 0) return;
-    let cancelled = false;
+    fetchLogoDataUrl().then(url => {
+      logoRef.current = url;
+      setLogoReady(true);
+    });
+  }, []);
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch('/api/preview-html', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            questions: debouncedQuestions.slice(0, 10), // limit for preview speed
-            coverSettings,
-            settings: debouncedSettings,
-            previewQuestionIndex: 0,
-          }),
-        });
-        if (!res.ok) throw new Error('Preview failed');
-        const html = await res.text();
-        if (!cancelled && iframeRef.current) {
-          iframeRef.current.srcdoc = html;
-        }
-      } catch (e) {
-        if (!cancelled) setError(String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-    return () => { cancelled = true; };
-  }, [debouncedSettings, debouncedQuestions, coverSettings]);
+  // Rebuild preview synchronously on every change.
+  // No debounce needed — buildHTMLTemplate is <1ms (pure string template).
+  useEffect(() => {
+    if (!logoReady || questions.length === 0 || !iframeRef.current) return;
+    const html = buildHTMLTemplate({
+      questions: [questions[0]],
+      coverSettings,
+      logoDataUrl: logoRef.current,
+      settings,
+      previewMode: true,
+      previewQuestionIndex: 0,
+    });
+    iframeRef.current.srcdoc = html;
+  }, [settings, questions, coverSettings, logoReady]);
 
   // A4 aspect ratio
   const A4_RATIO = 297 / 210;
@@ -167,10 +163,10 @@ function LivePreview({
           </svg>
           Live Preview
         </h3>
-        {loading && (
+        {!logoReady && (
           <span className="text-xs text-[var(--primary)] flex items-center gap-1">
             <span className="w-3 h-3 rounded-full border-2 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
-            Updating…
+            Loading…
           </span>
         )}
       </div>
@@ -179,9 +175,7 @@ function LivePreview({
         className="preview-pane overflow-hidden shadow-xl rounded-2xl"
         style={{ width: PREVIEW_W, height: PREVIEW_H + 32 }}
       >
-        {error ? (
-          <div className="p-4 text-xs text-red-500 text-center">{error}</div>
-        ) : questions.length === 0 ? (
+        {questions.length === 0 ? (
           <div className="p-4 text-xs text-gray-400 text-center">Select questions to preview</div>
         ) : (
           <div className="relative w-full h-full bg-white overflow-hidden">
@@ -198,15 +192,10 @@ function LivePreview({
                 pointerEvents: 'none',
               }}
             />
-            {loading && (
-              <div className="absolute inset-0 bg-white/70 flex items-center justify-center backdrop-blur-sm">
-                <div className="w-8 h-8 rounded-full border-4 border-[var(--primary)]/20 border-t-[var(--primary)] animate-spin" />
-              </div>
-            )}
           </div>
         )}
       </div>
-      <p className="text-xs text-gray-400 text-center">One sample page · Updates automatically</p>
+      <p className="text-xs text-gray-400 text-center">One sample page · Updates instantly</p>
     </div>
   );
 }
@@ -262,12 +251,10 @@ export default function Step3Customize() {
         throw new Error(errorMsg);
       }
 
-      // Get PDF as blob with explicit MIME type
       const blob = await res.blob();
       const pdfBlob = new Blob([blob], { type: 'application/pdf' });
       const url = URL.createObjectURL(pdfBlob);
 
-      // Must append to DOM and body.click() — bare a.click() can be blocked
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
@@ -275,7 +262,6 @@ export default function Step3Customize() {
       document.body.appendChild(a);
       a.click();
 
-      // Revoke AFTER a generous delay so browser has time to start download
       setTimeout(() => {
         URL.revokeObjectURL(url);
         document.body.removeChild(a);
@@ -304,7 +290,7 @@ export default function Step3Customize() {
           Customise &amp; Export
         </h2>
         <p className="text-sm text-gray-500 mt-1 ml-10">
-          Configure your PDF appearance — preview updates automatically.
+          Configure your PDF appearance — preview updates instantly.
         </p>
       </div>
 
