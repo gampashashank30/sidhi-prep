@@ -3,7 +3,7 @@
 // Uses puppeteer-core + @sparticuz/chromium for serverless (Render/Vercel/Railway)
 // Falls back to local system Chrome for development
 
-import puppeteer from 'puppeteer-core';
+import puppeteer, { Browser } from 'puppeteer-core';
 import { existsSync } from 'fs';
 import type { TemplateOptions } from './pdfTemplate';
 import { buildHTMLTemplate } from './pdfTemplate';
@@ -19,18 +19,24 @@ const PUPPETEER_ARGS = [
   '--disable-gpu',
 ];
 
+let cachedBrowser: Browser | null = null;
+
 async function launchBrowser() {
+  if (cachedBrowser && cachedBrowser.connected) {
+    return cachedBrowser;
+  }
+
   // ── 1. Try @sparticuz/chromium (works on Render, Railway, Vercel, etc.) ──
   try {
-    // Dynamic import so it doesn't break local dev if not installed
     const chromium = await import('@sparticuz/chromium');
     const executablePath = await chromium.default.executablePath();
     console.log('[pdfRenderer] Launching @sparticuz/chromium at:', executablePath);
-    return await puppeteer.launch({
+    cachedBrowser = await puppeteer.launch({
       executablePath,
       headless: true,
       args: [...PUPPETEER_ARGS, ...chromium.default.args],
     });
+    return cachedBrowser;
   } catch (sparticuzErr) {
     console.warn('[pdfRenderer] @sparticuz/chromium unavailable, trying local Chrome...', sparticuzErr);
   }
@@ -53,11 +59,12 @@ async function launchBrowser() {
     if (existsSync(chromePath)) {
       try {
         console.log('[pdfRenderer] Launching local Chrome at:', chromePath);
-        return await puppeteer.launch({
+        cachedBrowser = await puppeteer.launch({
           executablePath: chromePath,
           headless: true,
           args: PUPPETEER_ARGS,
         });
+        return cachedBrowser;
       } catch (err) {
         console.error('[pdfRenderer] Local Chrome launch failed at', chromePath, err);
       }
@@ -73,10 +80,9 @@ async function launchBrowser() {
 export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const html = buildHTMLTemplate(opts);
   const browser = await launchBrowser();
+  const page = await browser.newPage();
 
   try {
-    const page = await browser.newPage();
-
     // PDF generation doesn't need to load external resources — waitUntil:'domcontentloaded'
     // is faster and avoids hanging on Google Fonts network requests
     await page.setContent(html, {
@@ -93,6 +99,7 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
 
     return Buffer.from(pdfBuffer);
   } finally {
-    await browser.close();
+    await page.close(); // Only close the page, leave the browser running
   }
 }
+
