@@ -62,33 +62,43 @@ interface Layout {
 }
 
 function computeLayout(settings: PDFSettings): Layout {
-  const headerHeight = 10; // mm — the dark brand header bar
-  const footerHeight = 9;  // mm — page number + social icons
+  const headerHeight = 9;  // mm — the dark brand header bar
+  const footerHeight = 10; // mm — page number + social icons (taller for bigger icons)
 
   if (settings.borderEnabled) {
     const bw    = settings.borderWidthMm;
     const inset = BORDER_INSET_MM;          // 10
-    const cHalf = CORNER_ICON_SIZE_MM / 2;  // 9  (corner icon 18mm, half straddles border)
+    const cHalf = CORNER_ICON_SIZE_MM / 2;  // 8 (corner icon 16mm, half straddles border)
     const gap   = CONTENT_PADDING_MM;       // 6
 
-    // Border edge is at (inset + bw) from page edge
-    // Corner's inner edge is at (inset + bw + cHalf) from page edge
+    // Border outer edge at (inset) from page edge, inner edge at (inset + bw)
+    // Corner icons straddle the border: extend cHalf past each border edge
     // Content zone starts at (inset + bw + cHalf + gap) from page edge
-    const sideBase = inset + bw + cHalf + gap; // ~27mm
+    const sideBase = inset + bw + cHalf + gap;
 
-    // Header sits inside border zone, just above content
-    const headerTop = inset + bw + 1; // 13mm from top
+    // Header: positioned just inside the top border
+    const headerTop = inset + bw + 2;
 
-    // Content start must be below header
-    const padTop    = Math.max(sideBase, headerTop + headerHeight + 3);
-    const padBottom = sideBase + footerHeight + 2;
+    // padTop: content must be below the header AND clear the top corner icons
+    const padTop  = Math.max(sideBase, headerTop + headerHeight + 3);
+
+    // padBottom: content must clear the bottom border + corner icons.
+    // Footer is placed OUTSIDE the border (between border and page edge) so
+    // padBottom does NOT need to include footer height.
+    const padBottom = sideBase;
     const padSide   = sideBase;
+
+    // Footer lives BELOW the border (outside the border frame)
+    // Border outer edge is at (inset = 10mm) from page bottom.
+    // Footer at 1mm from page bottom → occupies 1mm to 11mm, safely outside border.
+    const fBottom = 1;  // mm from page edge
+    const fHeight = footerHeight;
 
     return {
       padTop, padRight: padSide, padBottom, padLeft: padSide,
       headerTop, headerHeight,
-      footerBottom: inset + bw + 1,
-      footerHeight,
+      footerBottom: fBottom,
+      footerHeight: fHeight,
       borderInset: inset,
       contentPageH: PAGE_HEIGHT_MM - padTop - padBottom,
     };
@@ -109,19 +119,24 @@ function computeLayout(settings: PDFSettings): Layout {
 
 // ─── Social footer bar ────────────────────────────────────────────────────────
 
+// Social icon SVGs — sized via wrapper div (7mm × 7mm), no fixed px width/height on SVG
 const SOCIAL_ICONS: Record<string, string> = {
-  instagram: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14"><defs><linearGradient id="iggrad" x1="0" x2="1" y1="1" y2="0"><stop offset="0%" stop-color="#f09433"/><stop offset="25%" stop-color="#e6683c"/><stop offset="50%" stop-color="#dc2743"/><stop offset="75%" stop-color="#cc2366"/><stop offset="100%" stop-color="#bc1888"/></linearGradient></defs><rect x="2" y="2" width="20" height="20" rx="5" fill="url(#iggrad)"/><path d="M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 7.4a2.9 2.9 0 1 1 0-5.8 2.9 2.9 0 0 1 0 5.8zm4.3-7.5a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0z" fill="#FFF"/></svg>`,
-  youtube:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14"><path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/><path fill="#FFFFFF" d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
-  telegram:  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="12" fill="#24A1DE"/><path fill="#FFFFFF" d="M5.4 11.5L18.4 6.5C18.9 6.3 19.3 6.7 19.1 7.2L16.2 19C16.1 19.5 15.5 19.7 15.1 19.4L11.5 16.5 9 18V14.5L17.5 7.5C17.7 7.3 17.4 7.1 17.2 7.3L7 13.5 4.1 12.6C3.6 12.4 3.6 11.7 4.1 11.5Z"/></svg>`,
-  playStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14"><path fill="#00E676" d="M3.2 23.8c.3.1.6.2 1 .2L15.5 12 4.2.1a1.5 1.5 0 0 0-1 .2C2.8.5 2.6 1 2.6 1.5v21c0 .5.2.9.6 1.3z"/><path fill="#FF3D00" d="M13.8 10.2L16 8l-9.5-5.4 7.3 7.6z"/><path fill="#FFC400" d="M16.7 13.1L21.2 12l-4.5-2.9-2.2 2.2 2.2 2.2z"/><path fill="#29B6F6" d="M6.3 4.4L15.8 9.9 13.6 12 6.3 4.4z"/></svg>`,
+  // Proper Instagram brand icon — radial gradient (yellow→orange→red→purple→blue)
+  instagram: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><defs><radialGradient id="ig_rg" cx="30%" cy="110%" r="130%"><stop offset="0%" stop-color="#fdf497"/><stop offset="10%" stop-color="#fdf497"/><stop offset="40%" stop-color="#fd5949"/><stop offset="65%" stop-color="#d6249f"/><stop offset="100%" stop-color="#285AEB"/></radialGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="url(#ig_rg)"/><circle cx="12" cy="12" r="4.8" fill="none" stroke="white" stroke-width="2"/><circle cx="17.6" cy="6.4" r="1.4" fill="white"/></svg>`,
+  youtube:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect x="0" y="3" width="24" height="18" rx="4" fill="#FF0000"/><polygon points="9.5,8 9.5,16 17,12" fill="white"/></svg>`,
+  telegram:  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><circle cx="12" cy="12" r="12" fill="#24A1DE"/><path fill="white" d="M5.4 11.5L18.4 6.5C18.9 6.3 19.3 6.7 19.1 7.2L16.2 19C16.1 19.5 15.5 19.7 15.1 19.4L11.5 16.5 9 18V14.5L17.5 7.5C17.7 7.3 17.4 7.1 17.2 7.3L7 13.5 4.1 12.6C3.6 12.4 3.6 11.7 4.1 11.5Z"/></svg>`,
+  playStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><path fill="#00C853" d="M3 23.5c.3.2.7.3 1.1.1L16.5 12 4.1.4C3.7.2 3.3.3 3 .5 2.7.8 2.5 1.2 2.5 1.6v20.8c0 .4.2.8.5 1.1z"/><path fill="#FF3D00" d="M14.2 10.2L17 7.8 5.4 1.3l8.8 8.9z"/><path fill="#FFC400" d="M17.8 13.1L21.5 12l-4.5-2.2-2.2 2.2 2.2 2.2 0.8-1.1z"/><path fill="#29B6F6" d="M5.4 22.7L17 16.2 14.2 13.8 5.4 22.7z"/></svg>`,
 };
 
+// Each icon is wrapped in a 7mm × 7mm div for consistent, large display in the footer
 function buildSocialItems(links: PDFSettings['socialLinks'], accentColor: string): string {
+  const wrap = (icon: string, href: string) =>
+    `<a href="${escHtml(href)}" style="display:inline-flex;width:7mm;height:7mm;flex-shrink:0;text-decoration:none;" title="">${icon}</a>`;
   const items: string[] = [];
-  if (links.telegram)  items.push(`<a href="${escHtml(links.telegram)}"  style="color:${accentColor};text-decoration:none;display:inline-flex;">${SOCIAL_ICONS.telegram}</a>`);
-  if (links.instagram) items.push(`<a href="${escHtml(links.instagram)}" style="color:${accentColor};text-decoration:none;display:inline-flex;">${SOCIAL_ICONS.instagram}</a>`);
-  if (links.youtube)   items.push(`<a href="${escHtml(links.youtube)}"   style="color:${accentColor};text-decoration:none;display:inline-flex;">${SOCIAL_ICONS.youtube}</a>`);
-  if (links.playStore) items.push(`<a href="${escHtml(links.playStore)}" style="color:${accentColor};text-decoration:none;display:inline-flex;">${SOCIAL_ICONS.playStore}</a>`);
+  if (links.telegram)  items.push(wrap(SOCIAL_ICONS.telegram,  links.telegram));
+  if (links.instagram) items.push(wrap(SOCIAL_ICONS.instagram, links.instagram));
+  if (links.youtube)   items.push(wrap(SOCIAL_ICONS.youtube,   links.youtube));
+  if (links.playStore) items.push(wrap(SOCIAL_ICONS.playStore, links.playStore));
   return items.join('');
 }
 
@@ -160,20 +175,32 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">QUESTION BANK</span>
     </div>`);
 
-  // ── Footer bar ──────────────────────────────────────────────────────────────
+  // ── Footer bar — placed OUTSIDE the border (below border frame) ─────────────
+  // When border is enabled, footer is between page edge and border outer edge
+  // (0–10mm zone). When border is disabled, footer is inside page normally.
   const socialItems = buildSocialItems(settings.socialLinks, accentColor);
+  // For border mode: span full width (outside border, page-edge to page-edge)
+  // For no-border mode: use normal 6mm left/right margins
+  const fLeft  = layout.borderInset ? '3mm' : '6mm';
+  const fRight = layout.borderInset ? '3mm' : '6mm';
   parts.push(`
     <div class="running-footer" style="
       position:fixed;
       bottom:${layout.footerBottom}mm;
-      left:${layout.borderInset ? layout.borderInset + settings.borderWidthMm : 6}mm;
-      right:${layout.borderInset ? layout.borderInset + settings.borderWidthMm : 6}mm;
+      left:${fLeft};
+      right:${fRight};
       height:${layout.footerHeight}mm;
-      display:flex;align-items:center;justify-content:center;gap:8px;
-      z-index:100;
+      display:flex;align-items:center;justify-content:center;
+      gap:4mm;
+      z-index:150;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
     ">
-      ${socialItems ? `<span style="display:flex;gap:8px;">${socialItems}</span><span style="color:#CBD5E1;font-size:8pt;">|</span>` : ''}
-      <span style="font-size:7.5pt;color:#64748B;font-family:'Inter',sans-serif;font-weight:500;">
+      ${socialItems
+        ? `<span style="display:flex;align-items:center;gap:3.5mm;">${socialItems}</span>
+           <span style="width:0.5px;height:5mm;background:#CBD5E1;flex-shrink:0;"></span>`
+        : ''}
+      <span style="font-size:7pt;color:#64748B;font-family:'Inter',sans-serif;font-weight:600;white-space:nowrap;">
         Page <span class="pg-num"></span>
       </span>
     </div>`);
@@ -418,32 +445,29 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
 }
 
 // ─── Ad block ─────────────────────────────────────────────────────────────────
+// Ad fills only the content area so the fixed border/header/footer show through,
+// giving the ad page the same template/branding as content pages.
 
 function renderAdBlock(dataUrl: string, linkUrl: string | undefined, layout: Layout): string {
-  // Use absolute positioning for the link/wrapper to ensure the entire page is clickable
-  // and Chromium's PDF generator correctly registers the bounding box for the hyperlink.
-  const inner = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:contain;display:block;margin:auto;" />`;
+  const img = `<img src="${dataUrl}" style="max-width:100%;max-height:${layout.contentPageH}mm;width:auto;height:auto;object-fit:contain;display:block;" />`;
   const content = linkUrl
-    ? `<a href="${escHtml(linkUrl.startsWith('http') ? linkUrl : 'https://' + linkUrl)}" style="display:block;position:absolute;inset:0;width:100%;height:100%;">${inner}</a>`
-    : `<div style="display:block;position:absolute;inset:0;width:100%;height:100%;">${inner}</div>`;
+    ? `<a href="${escHtml(linkUrl.startsWith('http') ? linkUrl : 'https://' + linkUrl)}" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${img}</a>`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${img}</div>`;
 
-  // Same stacking context strategy as cover: wrapper has position:relative but NO z-index
-  // → no stacking context → absolute child (z-index:500) is in the ROOT context.
   return `
-    <div style="position:relative;height:${layout.contentPageH}mm;break-before:page;page-break-before:always;break-after:page;page-break-after:always;">
-      <div style="
-        position:absolute;
-        top:-${layout.padTop}mm;
-        left:-${layout.padLeft}mm;
-        width:${PAGE_WIDTH_MM}mm;
-        height:${PAGE_HEIGHT_MM}mm;
-        background:#0A0A0A;
-        z-index:500;
-        -webkit-print-color-adjust:exact;
-        print-color-adjust:exact;
-      ">
-        ${content}
-      </div>
+    <div style="
+      height:${layout.contentPageH}mm;
+      break-before:page;page-break-before:always;
+      break-after:page;page-break-after:always;
+      display:flex;align-items:center;justify-content:center;
+      background:#F8FAFC;
+      border:1px solid #E2E8F0;
+      border-radius:4px;
+      position:relative;z-index:2;
+      overflow:hidden;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    ">
+      ${content}
     </div>
   `;
 }
