@@ -148,9 +148,9 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   parts.push(`
     <div class="running-header" style="
       position:fixed;
-      top:${layout.headerTop}mm;
-      left:${layout.borderInset ? layout.borderInset + settings.borderWidthMm + 1 : 6}mm;
-      right:${layout.borderInset ? layout.borderInset + settings.borderWidthMm + 1 : 6}mm;
+      top:calc(-1 * var(--off-t) + ${layout.headerTop}mm);
+      left:calc(-1 * var(--off-l) + ${layout.borderInset ? layout.borderInset + settings.borderWidthMm + 1 : 6}mm);
+      right:calc(-1 * var(--off-r) + ${layout.borderInset ? layout.borderInset + settings.borderWidthMm + 1 : 6}mm);
       height:${layout.headerHeight}mm;
       background:${DEFAULT_PRIMARY_DARK};
       color:white;
@@ -179,9 +179,9 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   parts.push(`
     <div class="running-footer" style="
       position:fixed;
-      bottom:${layout.footerBottom}mm;
-      left:${fLeft};
-      right:${fRight};
+      bottom:calc(-1 * var(--off-b) + ${layout.footerBottom}mm);
+      left:calc(-1 * var(--off-l) + ${fLeft});
+      right:calc(-1 * var(--off-r) + ${fRight});
       height:${layout.footerHeight}mm;
       display:flex;align-items:center;justify-content:center;
       gap:4mm;
@@ -231,7 +231,11 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     // Border frame (z:10)
     parts.push(`
       <div class="running-border" style="
-        position:fixed;top:${bi}mm;left:${bi}mm;right:${bi}mm;bottom:${bi}mm;
+        position:fixed;
+        top:calc(-1 * var(--off-t) + ${bi}mm);
+        left:calc(-1 * var(--off-l) + ${bi}mm);
+        right:calc(-1 * var(--off-r) + ${bi}mm);
+        bottom:calc(-1 * var(--off-b) + ${bi}mm);
         border:${borderWidthMm}mm ${borderStyle} ${borderColor};
         box-sizing:border-box;pointer-events:none;z-index:10;
         -webkit-print-color-adjust:exact;print-color-adjust:exact;
@@ -248,7 +252,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     const size = (Math.min(PAGE_WIDTH_MM, PAGE_HEIGHT_MM) * WATERMARK_SIZE_PERCENT) / 100;
     parts.push(`
       <img class="running-watermark" src="${logoDataUrl}" style="
-        position:fixed;top:50%;left:50%;
+        position:fixed;top:calc(-1 * var(--off-t) + 50%);left:calc(-1 * var(--off-l) + 50%);
         transform:translate(-50%,-50%);
         width:${size}mm;height:${size}mm;
         object-fit:contain;opacity:${WATERMARK_OPACITY};
@@ -408,8 +412,8 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
   // (header z-index:100, border z-index:10, watermark z-index:1).
   const overlayStyle = `
     position: absolute;
-    top: -${layout.padTop}mm;
-    left: -${layout.padLeft}mm;
+    top: calc(-1 * var(--off-t));
+    left: calc(-1 * var(--off-l));
     width: ${PAGE_WIDTH_MM}mm;
     height: ${PAGE_HEIGHT_MM}mm;
     z-index: 500;
@@ -605,6 +609,18 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   <style>
     /* ── Reset ── */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --off-t: ${layout.padTop}mm;
+      --off-r: ${layout.padRight}mm;
+      --off-b: ${layout.padBottom}mm;
+      --off-l: ${layout.padLeft}mm;
+    }
+    @media screen {
+      :root {
+        --off-t: 0mm; --off-r: 0mm; --off-b: 0mm; --off-l: 0mm;
+      }
+    }
 
     /* ── Page setup: @page margins ensure EVERY page gets proper
        top/bottom clearance for the running header and footer.
