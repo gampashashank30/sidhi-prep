@@ -62,35 +62,30 @@ interface Layout {
 }
 
 function computeLayout(settings: PDFSettings): Layout {
-  const headerHeight = 9;  // mm — the dark brand header bar
-  const footerHeight = 10; // mm — page number + social icons (taller for bigger icons)
+  const headerHeight = 9;  // mm
+  const footerHeight = 10; // mm
 
   if (settings.borderEnabled) {
     const bw    = settings.borderWidthMm;
-    const inset = BORDER_INSET_MM;          // 10
-    const cHalf = CORNER_ICON_SIZE_MM / 2;  // 8 (corner icon 16mm, half straddles border)
-    const gap   = CONTENT_PADDING_MM;       // 6
+    const inset = BORDER_INSET_MM;          // 10mm
+    const cHalf = CORNER_ICON_SIZE_MM / 2;  // 8mm
+    const gap   = CONTENT_PADDING_MM;       // 6mm
 
-    // Border outer edge at (inset) from page edge, inner edge at (inset + bw)
-    // Corner icons straddle the border: extend cHalf past each border edge
-    // Content zone starts at (inset + bw + cHalf + gap) from page edge
-    const sideBase = inset + bw + cHalf + gap;
+    // Corner icon bottom from page top: inset + cHalf = 10 + 8 = 18mm
+    // Header must start BELOW corner icons to avoid overlap.
+    const headerTop = inset + cHalf + 2; // 20mm — safely below corner icon bottom (18mm)
 
-    // Header: positioned just inside the top border
-    const headerTop = inset + bw + 2;
+    // Content must start below the header
+    const padTop    = headerTop + headerHeight + 3; // 32mm
 
-    // padTop: content must be below the header AND clear the top corner icons
-    const padTop  = Math.max(sideBase, headerTop + headerHeight + 3);
+    // Content must end above bottom corner icons (bottom from page: inset + cHalf = 18mm)
+    // Footer is OUTSIDE border (below page edge), so padBottom only needs to clear corners.
+    const padBottom = inset + cHalf + 2; // 20mm
 
-    // padBottom: content must clear the bottom border + corner icons.
-    // Footer is placed OUTSIDE the border (between border and page edge) so
-    // padBottom does NOT need to include footer height.
-    const padBottom = sideBase;
-    const padSide   = sideBase;
+    // Sides: clear border line + corner icon horizontal extent + gap
+    const padSide   = inset + bw + cHalf + gap; // 26mm
 
-    // Footer lives BELOW the border (outside the border frame)
-    // Border outer edge is at (inset = 10mm) from page bottom.
-    // Footer at 1mm from page bottom → occupies 1mm to 11mm, safely outside border.
+    // Footer outside border (between page edge and border outer edge, 0-10mm zone)
     const fBottom = 1;  // mm from page edge
     const fHeight = footerHeight;
 
@@ -179,8 +174,6 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   // When border is enabled, footer is between page edge and border outer edge
   // (0–10mm zone). When border is disabled, footer is inside page normally.
   const socialItems = buildSocialItems(settings.socialLinks, accentColor);
-  // For border mode: span full width (outside border, page-edge to page-edge)
-  // For no-border mode: use normal 6mm left/right margins
   const fLeft  = layout.borderInset ? '3mm' : '6mm';
   const fRight = layout.borderInset ? '3mm' : '6mm';
   parts.push(`
@@ -205,26 +198,37 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       </span>
     </div>`);
 
-  // ── Border ──────────────────────────────────────────────────────────────────
+  // ── Border + Corner icons ─────────────────────────────────────────────────────
   if (settings.borderEnabled) {
     const { borderColor, borderStyle, borderWidthMm } = settings;
-    const bi = BORDER_INSET_MM;
-    const cs = CORNER_ICON_SIZE_MM;
+    const bi = BORDER_INSET_MM; // 10mm from page edges
+    const cs = CORNER_ICON_SIZE_MM; // 16mm diameter
+    const half = cs / 2; // 8mm
+
     const logoEl = logoDataUrl
       ? `<div style="
           width:${cs}mm;height:${cs}mm;
           border-radius:50%;
-          background:white;
-          border:1.5px solid ${borderColor};
+          background:${primaryColor};
+          border:2px solid ${borderColor};
           display:flex;align-items:center;justify-content:center;
           overflow:hidden;
-          box-sizing:border-box;
-          box-shadow:0 1px 3px rgba(0,0,0,0.12);
+          box-shadow:0 1px 4px rgba(0,0,0,0.2);
+          -webkit-print-color-adjust:exact;print-color-adjust:exact;
         ">
-          <img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          <img src="${logoDataUrl}" style="width:82%;height:82%;object-fit:contain;" />
         </div>`
-      : `<div style="width:${cs}mm;height:${cs}mm;border-radius:50%;background:white;border:1.5px solid ${borderColor};"></div>`;
+      : `<div style="
+          width:${cs}mm;height:${cs}mm;
+          border-radius:50%;
+          background:${primaryColor};
+          border:2px solid ${borderColor};
+          display:flex;align-items:center;justify-content:center;
+          color:white;font-weight:700;font-size:9pt;
+          -webkit-print-color-adjust:exact;print-color-adjust:exact;
+        ">S</div>`;
 
+    // Border frame (z:10)
     parts.push(`
       <div class="running-border" style="
         position:fixed;top:${bi}mm;left:${bi}mm;right:${bi}mm;bottom:${bi}mm;
@@ -602,10 +606,14 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     /* ── Reset ── */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
-    /* ── Page setup — zero margins, we control all spacing ── */
+    /* ── Page setup: @page margins ensure EVERY page gets proper
+       top/bottom clearance for the running header and footer.
+       position:fixed elements (header, footer, border) are positioned
+       relative to the physical page in Chromium print mode, so they
+       sit in the margin areas on every page. ── */
     @page {
       size: ${PAGE_WIDTH_MM}mm ${PAGE_HEIGHT_MM}mm;
-      margin: 0;
+      margin: ${layout.padTop}mm ${layout.padRight}mm ${layout.padBottom}mm ${layout.padLeft}mm;
     }
 
     /* ── Base typography ── */
@@ -619,9 +627,11 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       color-adjust: exact;
     }
 
-    /* ── Body padding creates the safe content zone ── */
+
+    /* ── Body: no padding — @page margins handle per-page spacing ── */
     body {
-      padding: ${layout.padTop}mm ${layout.padRight}mm ${layout.padBottom}mm ${layout.padLeft}mm;
+      margin: 0;
+      padding: 0;
     }
 
     /* ── CSS page counter for footer ── */

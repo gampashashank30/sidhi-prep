@@ -20,20 +20,30 @@ function CoverImageSection() {
   const PREVIEW_WIDTH = Math.round(PREVIEW_HEIGHT * A4_RATIO);
 
   const processFile = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'cover');
-    formData.append('focalX', '0.5');
-    formData.append('focalY', '0.5');
-
     try {
-      const res = await fetch('/api/upload-image', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.dataUrl) {
-        setCoverSettings({ dataUrl: data.dataUrl, focalX: 0.5, focalY: 0.5 });
-      }
+      // Compress client-side — no server round-trip, instant on Render
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        const blobUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 1600;
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { URL.revokeObjectURL(blobUrl); reject(new Error('canvas')); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(blobUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.9));
+        };
+        img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('load')); };
+        img.src = blobUrl;
+      });
+      setCoverSettings({ dataUrl, focalX: 0.5, focalY: 0.5 });
     } catch (err) {
-      console.error('Cover image upload failed:', err);
+      console.error('Cover image processing failed:', err);
     }
   }, [setCoverSettings]);
 

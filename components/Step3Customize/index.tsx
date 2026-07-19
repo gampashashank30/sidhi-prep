@@ -217,16 +217,35 @@ export default function Step3Customize() {
     updatePdfSettings({ [key]: value } as Partial<PDFSettings>);
   }, [updatePdfSettings]);
 
-  // ── Ad image upload ────────────────────────────────────────────────────────
+  // ── Ad image upload — 100% client-side, instant, no server round-trip ──────
   const handleAdUpload = useCallback(async (files: FileList) => {
+    const compress = (file: File): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        const blobUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 1400; // max dimension in px
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { URL.revokeObjectURL(blobUrl); reject(new Error('canvas')); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(blobUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('load')); };
+        img.src = blobUrl;
+      });
+
     const uploaded: AdImage[] = [];
     for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'ad');
-      const res = await fetch('/api/upload-image', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.dataUrl) uploaded.push({ dataUrl: data.dataUrl });
+      try {
+        const dataUrl = await compress(file);
+        uploaded.push({ dataUrl });
+      } catch { /* skip bad files */ }
     }
     update('adImages', [...pdfSettings.adImages, ...uploaded]);
   }, [pdfSettings.adImages, update]);
