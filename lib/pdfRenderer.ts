@@ -93,8 +93,15 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      margin: { top: 0, right: 0, bottom: '0.1mm', left: 0 },
       preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate: `
+        <div style="width: 100%; text-align: center; font-size: 7px; color: #64748B; font-family: sans-serif; padding-bottom: 2mm;">
+          Page <span class="pageNumber"></span>
+        </div>
+      `,
     });
 
     return Buffer.from(pdfBuffer);

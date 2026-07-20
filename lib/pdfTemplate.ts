@@ -100,7 +100,7 @@ export function renderMath(raw: string): string {
         }
       }
       // If still failing, output raw math gracefully
-      out.push(`<span style="color:#B91C1C;font-family:monospace;font-size:8.5pt;">${escHtml(mathContent)}</span>`);
+      out.push(`<span style="color:#1F1F1F;font-family:monospace;font-size:8.5pt;">${escHtml(mathContent)}</span>`);
     }
 
     lastIdx = m.index + m[0].length;
@@ -272,12 +272,8 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       print-color-adjust:exact;
     ">
       ${socialItems
-        ? `<span style="display:flex;align-items:center;gap:3.5mm;">${socialItems}</span>
-           <span style="width:0.5px;height:5mm;background:#CBD5E1;flex-shrink:0;"></span>`
+        ? `<span style="display:flex;align-items:center;gap:3.5mm;">${socialItems}</span>`
         : ''}
-      <span style="font-size:7pt;color:#64748B;font-family:'Inter',sans-serif;font-weight:600;white-space:nowrap;">
-        Page <span class="pg-num"></span>
-      </span>
     </div>`);
 
   // ── Border + Corner icons ─────────────────────────────────────────────────────
@@ -642,16 +638,30 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   sections.push(`</div>`); // close question section
 
   // 4. Explanations section
-  const explanations = questions
-    .map(q => renderExplanationEntry(q, primaryColor, accentColor))
-    .join('');
-
   sections.push(`<div style="break-before:page;page-break-before:always;">
     <h2 style="font-size:13pt;font-weight:700;color:${primaryColor};margin:0 0 10px 0;padding-bottom:6px;border-bottom:2.5px solid ${primaryColor};position:relative;z-index:2;">
       Explanations
-    </h2>
-    ${explanations}
-  </div>`);
+    </h2>`);
+
+  let expPageCount = 0;
+  for (let qi = 0; qi < questions.length; qi++) {
+    const q = questions[qi];
+    sections.push(renderExplanationEntry(q, primaryColor, accentColor));
+
+    if (settings.adsEnabled && settings.adImages.length > 0) {
+      const pagesUsed = Math.floor((qi + 1) / 7);
+      if (pagesUsed > expPageCount && pagesUsed % settings.adIntervalPages === 0) {
+        expPageCount = pagesUsed;
+        const ad = settings.adImages[adIndex % settings.adImages.length];
+        sections.push('</div>'); // close current section
+        sections.push(renderAdBlock(ad.dataUrl, ad.linkUrl, layout));
+        sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
+        adIndex++;
+      }
+    }
+  }
+
+  sections.push(`</div>`);
 
   return wrapHtml({
     body: sections.join('\n'),
