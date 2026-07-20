@@ -70,24 +70,37 @@ export function renderMath(raw: string): string {
     }
 
     const isBlock     = m[1] !== undefined || m[3] !== undefined;
-    // Normalise \\frac → \frac etc. (markdown escapes backslashes as \\)
-    let mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\/g, '\\');
+    // Unescape commands like \\frac to \frac, but LEAVE \\ line breaks intact!
+    let mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\(?=[a-zA-Z])/g, '\\');
 
     // Force display style for inline math to prevent squished fractions
     if (!isBlock) {
       mathContent = '\\displaystyle ' + mathContent;
     }
 
+    const katexOpts = {
+      throwOnError: true,
+      displayMode:  isBlock,
+      output:       'html',
+      strict:       false,
+    };
+
     try {
-      out.push(katex.renderToString(mathContent, {
-        throwOnError: false,
-        displayMode:  isBlock,
-        output:       'html',
-        strict:       false,
-      }));
-    } catch {
-      // Fallback: show raw math without crashing
-      out.push(`<code style="font-size:0.85em;color:#555;">${escHtml(mathContent)}</code>`);
+      out.push(katex.renderToString(mathContent, katexOpts));
+    } catch (e: any) {
+      const msg = e.message || '';
+      // If KaTeX fails due to alignment chars (& or \\), wrap in aligned and retry
+      if (msg.includes('Misplaced') || msg.includes('\\\\') || mathContent.includes('&') || mathContent.includes('\\\\')) {
+        try {
+          const alignedContent = '\\begin{aligned}\n' + mathContent + '\n\\end{aligned}';
+          out.push(katex.renderToString(alignedContent, katexOpts));
+          continue; // Success on retry
+        } catch (e2) {
+          // Fall through
+        }
+      }
+      // If still failing, output raw math gracefully
+      out.push(`<span style="color:#B91C1C;font-family:monospace;font-size:8.5pt;">${escHtml(mathContent)}</span>`);
     }
 
     lastIdx = m.index + m[0].length;
