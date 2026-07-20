@@ -71,7 +71,12 @@ export function renderMath(raw: string): string {
 
     const isBlock     = m[1] !== undefined || m[3] !== undefined;
     // Normalise \\frac → \frac etc. (markdown escapes backslashes as \\)
-    const mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\/g, '\\');
+    let mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\/g, '\\');
+
+    // Force display style for inline math to prevent squished fractions
+    if (!isBlock) {
+      mathContent = '\\displaystyle ' + mathContent;
+    }
 
     try {
       out.push(katex.renderToString(mathContent, {
@@ -676,7 +681,12 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   ${katexCss}
   <style>
     /* ── Reset ── */
-    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    *, *::before, *::after { box-sizing:border-box; }
+    body, h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, figcaption, blockquote, dl, dd { margin:0; padding:0; }
+
+    /* ── Math Rendering Fixes ── */
+    .katex { line-height: normal; }
+    .katex * { line-height: normal; }
 
     /* ── Page setup: 0 margins, the table handles clearance ── */
     @page {
