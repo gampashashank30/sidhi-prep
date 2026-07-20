@@ -83,12 +83,15 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const page = await browser.newPage();
 
   try {
-    // PDF generation doesn't need to load external resources — waitUntil:'domcontentloaded'
-    // is faster and avoids hanging on Google Fonts network requests
+    // Wait for KaTeX CDN scripts to load + render math. 'networkidle0' ensures
+    // the KaTeX JS/CSS from jsdelivr.net are fully fetched before PDF capture.
     await page.setContent(html, {
-      waitUntil: 'domcontentloaded',
-      timeout: 45000,
+      waitUntil: 'networkidle0',
+      timeout: 60000,
     });
+
+    // Extra wait to ensure KaTeX DOMContentLoaded handler has fired and rendered all math
+    await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 500)));
 
     const pdfBuffer = await page.pdf({
       format: 'A4',

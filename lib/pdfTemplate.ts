@@ -36,6 +36,81 @@ export function escHtml(s: string): string {
     .replace(/\u2013/g, '&ndash;');
 }
 
+// ─── Math-aware renderer ───────────────────────────────────────────────────────
+// Splits text on $$...$$ (block) and $...$ (inline) delimiters.
+// Plain text segments are HTML-escaped; math segments are wrapped in spans with
+// data-math attributes that KaTeX auto-render picks up in the browser/Puppeteer.
+
+export function renderMath(raw: string): string {
+  if (!raw) return '';
+  // Segment the string by $$....$$ then $...$ delimiters
+  const segments: string[] = [];
+  let remaining = raw;
+
+  // We process in passes: block math first, then inline math
+  // Use a two-pass approach: split on $$ first, then $
+  const parts: Array<{ text: string; isBlock: boolean; isMath: boolean }> = [];
+
+  // Step 1: split on $$...$$ (block)
+  const blockRe = /\$\$([\s\S]+?)\$\$/g;
+  let lastBlockIdx = 0;
+  let bm: RegExpExecArray | null;
+  const tempParts: Array<{ text: string; isMath: boolean; isBlock: boolean }> = [];
+  blockRe.lastIndex = 0;
+  while ((bm = blockRe.exec(remaining)) !== null) {
+    if (bm.index > lastBlockIdx) {
+      tempParts.push({ text: remaining.slice(lastBlockIdx, bm.index), isMath: false, isBlock: false });
+    }
+    tempParts.push({ text: bm[1], isMath: true, isBlock: true });
+    lastBlockIdx = bm.index + bm[0].length;
+  }
+  if (lastBlockIdx < remaining.length) {
+    tempParts.push({ text: remaining.slice(lastBlockIdx), isMath: false, isBlock: false });
+  }
+
+  // Step 2: for each non-math segment, split on $...$  (inline)
+  const inlineRe = /\$([^$\n]+?)\$/g;
+  for (const part of tempParts) {
+    if (part.isMath) {
+      parts.push(part);
+    } else {
+      let lastInlineIdx = 0;
+      let im: RegExpExecArray | null;
+      inlineRe.lastIndex = 0;
+      while ((im = inlineRe.exec(part.text)) !== null) {
+        if (im.index > lastInlineIdx) {
+          parts.push({ text: part.text.slice(lastInlineIdx, im.index), isMath: false, isBlock: false });
+        }
+        parts.push({ text: im[1], isMath: true, isBlock: false });
+        lastInlineIdx = im.index + im[0].length;
+      }
+      if (lastInlineIdx < part.text.length) {
+        parts.push({ text: part.text.slice(lastInlineIdx), isMath: false, isBlock: false });
+      }
+    }
+  }
+
+  // Step 3: render each part
+  return parts.map(p => {
+    if (p.isMath) {
+      if (p.isBlock) {
+        return `<span class="math-block" data-math="${escHtml(p.text)}"></span>`;
+      }
+      return `<span class="math-inline" data-math="${escHtml(p.text)}"></span>`;
+    }
+    // Plain text: HTML-escape, preserve line breaks
+    return escHtml(p.text).replace(/\n/g, '<br/>');
+  }).join('');
+}
+// Also handle markdown bold/italic remnants from the docx converter
+// e.g. **Q1.** → strip the markers so they don't show in PDF
+export function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/^\s*#+\s*/gm, '');  // strip heading markers
+}
+
 // ─── Slug helper ──────────────────────────────────────────────────────────────
 
 export function slugify(path: string[]): string {
@@ -276,14 +351,14 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
         ${(['A','B','C','D'] as const).map(l =>
           `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
             <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;">${l})</strong>
-            <span style="font-size:8.5pt;">${escHtml(q.options[l])}</span>
+            <span style="font-size:8.5pt;">${renderMath(stripMarkdown(q.options[l]))}</span>
            </span>`).join('')}
        </div>`
     : `<div style="margin:4px 0 5px 0;">
         ${(['A','B','C','D'] as const).map(l =>
           `<div style="display:flex;gap:5px;align-items:flex-start;margin-bottom:1px;">
             <strong style="color:${primaryColor};flex-shrink:0;min-width:16px;font-size:8.5pt;">${l})</strong>
-            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${escHtml(q.options[l])}</span>
+            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${renderMath(stripMarkdown(q.options[l]))}</span>
            </div>`).join('')}
        </div>`;
 
@@ -313,7 +388,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
   ">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
       <div style="flex:1;min-width:0;">
-        <span style="font-weight:700;color:${primaryColor};font-size:8.5pt;">Q${q.number}. </span><span style="color:${NEUTRAL_TEXT};font-size:8.5pt;word-break:break-word;">${escHtml(q.text)}</span>
+        <span style="font-weight:700;color:${primaryColor};font-size:8.5pt;">Q${q.number}. </span><span style="color:${NEUTRAL_TEXT};font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.text))}</span>
       </div>
       ${answerBadge}
     </div>
@@ -354,9 +429,9 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     position:relative;z-index:2;
   ">
     <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${q.number} — Explanation</div>
-    <div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${escHtml(q.explanation)}</div>
+    <div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>
     <div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
-      <strong>Correct Answer:</strong> ${q.answer}) ${escHtml(q.options[q.answer])}
+      <strong>Correct Answer:</strong> ${q.answer}) ${renderMath(stripMarkdown(q.options[q.answer]))}
     </div>
     <a href="#q-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;">← Back to Question ${q.number}</a>
   </div>`;
@@ -600,12 +675,34 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />`;
 
+  // KaTeX for math rendering — always loaded (lightweight, ~80KB)
+  const katexLink = `
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Render pre-tagged math spans
+      document.querySelectorAll('.math-inline').forEach(function(el) {
+        try {
+          katex.render(el.getAttribute('data-math'), el, { throwOnError: false, displayMode: false });
+        } catch(e) { el.textContent = el.getAttribute('data-math'); }
+      });
+      document.querySelectorAll('.math-block').forEach(function(el) {
+        try {
+          katex.render(el.getAttribute('data-math'), el, { throwOnError: false, displayMode: true });
+        } catch(e) { el.textContent = el.getAttribute('data-math'); }
+      });
+    });
+  </script>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Siddhi Question Bank</title>
   ${fontLink}
+  ${katexLink}
   <style>
     /* ── Reset ── */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
