@@ -38,43 +38,10 @@ export function escHtml(s: string): string {
 }
 
 // ─── Math-aware renderer (SERVER-SIDE via KaTeX) ──────────────────────────────────────
-// Detects bare LaTeX commands that appear WITHOUT $ delimiters
-// e.g. "x+\frac{1}{x}=8" or "8k^{6}+15k^{3}-2=0"
-const BARE_LATEX_RE = /\\(?:frac|sqrt|times|cdot|div|pm|mp|leq|geq|neq|approx|infty|sum|prod|int|lim|left|right|text|mathrm|mathbf|therefore|because|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|Delta|Sigma|Omega|Gamma|Lambda)/;
-
-/**
- * Render a plain-text chunk (no outer delimiters matched).
- * Split on '&' (alignment separator in explanation steps). Each piece is
- * checked: if it contains bare LaTeX commands the WHOLE piece is rendered
- * as inline KaTeX; otherwise it is HTML-escaped prose.
- */
-function renderTextChunk(chunk: string): string {
-  // Split on '&' to handle step-by-step math separated by ampersands
-  const pieces = chunk.split('&');
-  return pieces.map((piece, idx) => {
-    const sep = idx < pieces.length - 1 ? '<span style="margin:0 4px;">&amp;</span>' : '';
-    const trimmed = piece.trim();
-
-    // If the piece contains bare LaTeX commands, render the whole piece as math
-    if (BARE_LATEX_RE.test(trimmed) && trimmed.length > 0) {
-      // Normalise \\ → \ (markdown double-escaping)
-      const mathContent = trimmed.replace(/\\\\/g, '\\');
-      try {
-        return katex.renderToString(mathContent, {
-          throwOnError: false,
-          displayMode: false,
-          output: 'html',
-          strict: false,
-        }) + sep;
-      } catch {
-        return `<code style="font-size:0.85em;color:#555;">${escHtml(mathContent)}</code>${sep}`;
-      }
-    }
-
-    // Plain prose — HTML-escape and convert newlines to <br>
-    return escHtml(piece).replace(/\n/g, '<br/>') + sep;
-  }).join('');
-}
+// Detects all LaTeX delimiter styles, normalises double-backslash escaping
+// (markdown converters output \\frac instead of \frac), and renders each
+// math fragment server-side with katex.renderToString() so Puppeteer gets
+// fully-rendered HTML with no browser-side JS required.
 
 export function renderMath(raw: string): string {
   if (!raw) return '';
@@ -87,27 +54,24 @@ export function renderMath(raw: string): string {
 
   const out: string[] = [];
 
-  // One-pass regex: match all LaTeX delimiter styles in priority order
+  // One-pass regex: match all four LaTeX delimiter styles in priority order
   //   $$...$$ → block    (group 1)
   //   $...$   → inline   (group 2)
   //   \[...\] → block    (group 3)
   //   \(...\) → inline   (group 4)
-  //   bare    → inline   (group 5): LaTeX without delimiters, e.g. \frac{1}{x}
-  //             Matches a bare backslash-command token that starts with a known command.
-  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)|((?:\\(?:frac|sqrt|times|cdot|div|pm|mp|leq|geq|neq|approx|infty|sum|prod|int|lim|log|sin|cos|tan|left|right|text|mathrm|mathbf|ldots|cdots|therefore|because|implies|iff|forall|exists|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|Delta|Sigma|Omega|Gamma|Lambda)(?:\{[^}]*\})*)+(?:\^\{[^}]*\}|_\{[^}]*\}|\^[\w]|_[\w])?(?:[+\-=\/^_{}\\](?:\\[a-zA-Z]+(?:\{[^}]*\})*|[^\s&$\\]*))*)/g;
+  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
   let lastIdx = 0;
   let m: RegExpExecArray | null;
 
   while ((m = mathRe.exec(text)) !== null) {
-    // Emit preceding plain text — run through renderTextChunk to catch bare LaTeX
+    // Emit preceding plain text
     if (m.index > lastIdx) {
-      out.push(renderTextChunk(text.slice(lastIdx, m.index)));
+      out.push(escHtml(text.slice(lastIdx, m.index)).replace(/\n/g, '<br/>'));
     }
 
     const isBlock     = m[1] !== undefined || m[3] !== undefined;
-    const rawContent  = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
     // Normalise \\frac → \frac etc. (markdown escapes backslashes as \\)
-    const mathContent = rawContent.replace(/\\\\/g, '\\');
+    const mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\/g, '\\');
 
     try {
       out.push(katex.renderToString(mathContent, {
@@ -126,7 +90,7 @@ export function renderMath(raw: string): string {
 
   // Remaining plain text
   if (lastIdx < text.length) {
-    out.push(renderTextChunk(text.slice(lastIdx)));
+    out.push(escHtml(text.slice(lastIdx)).replace(/\n/g, '<br/>'));
   }
 
   return out.join('');
@@ -265,7 +229,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       print-color-adjust:exact;
     ">
       ${logoImg}
-      <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">SiddhiPrep</span>
+      <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">Siddhi</span>
       <span style="flex:1;"></span>
       <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">QUESTION BANK</span>
     </div>`);
@@ -525,7 +489,7 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
   if (!coverSettings) {
     inner = `<div style="${overlayStyle}background:linear-gradient(150deg,#0F3D6E 0%,#1B5EA7 55%,#14B89A 100%);display:flex;align-items:center;justify-content:center;">
       <div style="text-align:center;color:white;">
-        <div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">SiddhiPrep</div>
+        <div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Siddhi</div>
         <div style="font-size:13pt;opacity:0.8;letter-spacing:3px;text-transform:uppercase;">Question Bank</div>
       </div>
     </div>`;
@@ -707,7 +671,7 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>SiddhiPrep Question Bank</title>
+  <title>Siddhi Question Bank</title>
   ${fontLink}
   ${katexCss}
   <style>
@@ -738,9 +702,7 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       padding: 0;
     }
 
-    /* ── CSS page counter for footer — starts at 1 ── */
-    @page { counter-increment: page; }
-    @page :first { counter-reset: page 0; }
+    /* ── CSS page counter for footer ── */
     .pg-num::after { content: counter(page); }
 
     /* NOTE: We do NOT add z-index to body > * here.
