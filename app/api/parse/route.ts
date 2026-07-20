@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Extract raw text with mammoth (preserves paragraph boundaries as \n)
-    const result = await mammoth.extractRawText({ buffer });
-    const rawText = result.value;
+    // Extract markdown text using office-to-markdown to properly parse OMML (Word Math) to LaTeX
+    const { docxToMarkdown } = await import('@aidalinfo/office-to-markdown');
+    const rawText = await docxToMarkdown(buffer);
 
     // Extract paragraph array
     const paragraphs = extractParagraphs(rawText);

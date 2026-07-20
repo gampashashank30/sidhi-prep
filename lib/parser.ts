@@ -6,17 +6,17 @@ import type { Question, ValidationError, ParseResult } from './types';
 
 // ─── Regex patterns (from spec §2.2) ─────────────────────────────────────────
 
-const RE_QUESTION  = /^Q(\d+)\.(.*)$/;
-const RE_OPT_A     = /^A\.(.*)$/;
-const RE_OPT_B     = /^B\.(.*)$/;
-const RE_OPT_C     = /^C\.(.*)$/;
-const RE_OPT_D     = /^D\.(.*)$/;
-const RE_OPT_E     = /^E\./;           // detect unexpected 5th option
-const RE_ANY_OPT   = /^[A-E]\./;       // generic option-like line
-const RE_ANSWER    = /^Ans:\s*([A-D])\s*$/i;
-const RE_EXPLANATION = /^Exp:(.*)$/i;
-const RE_SUBJECT   = /^Subject:(.*)$/i;
-const RE_DIFFICULTY = /^Difficulty:\s*(Easy|Medium|Hard)\s*$/i;
+const RE_QUESTION  = /^(?:\*\*|\*|__|_)?Q(\d+)\.(?:\*\*|\*|__|_)?(.*)$/;
+const RE_OPT_A     = /^(?:\*\*|\*|__|_)?A\.(?:\*\*|\*|__|_)?(.*)$/;
+const RE_OPT_B     = /^(?:\*\*|\*|__|_)?B\.(?:\*\*|\*|__|_)?(.*)$/;
+const RE_OPT_C     = /^(?:\*\*|\*|__|_)?C\.(?:\*\*|\*|__|_)?(.*)$/;
+const RE_OPT_D     = /^(?:\*\*|\*|__|_)?D\.(?:\*\*|\*|__|_)?(.*)$/;
+const RE_OPT_E     = /^(?:\*\*|\*|__|_)?E\./;           // detect unexpected 5th option
+const RE_ANY_OPT   = /^(?:\*\*|\*|__|_)?[A-E]\./;       // generic option-like line
+const RE_ANSWER    = /^(?:\*\*|\*|__|_)?Ans:\s*(?:\*\*|\*|__|_)?([A-D])(?:\*\*|\*|__|_)?\s*$/i;
+const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
+const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
+const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Medium|Hard)(?:\*\*|\*|__|_)?\s*$/i;
 
 // ─── Topic normalisation (spec §2.4) ─────────────────────────────────────────
 
