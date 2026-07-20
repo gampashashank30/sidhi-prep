@@ -81,7 +81,7 @@ export function renderMath(raw: string): string {
     const katexOpts = {
       throwOnError: true,
       displayMode:  isBlock,
-      output:       'html',
+      output:       'html' as const,
       strict:       false,
     };
 
