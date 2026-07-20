@@ -125,8 +125,20 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       }
 
       const m = line.match(re)!;
-      options[letter] = m[1].trim();
+      let optionText = m[1].trim();
       i++;
+
+      // Collect multi-line option text
+      while (i < paragraphs.length) {
+        const next = paragraphs[i];
+        if (RE_ANY_OPT.test(next)) break;
+        if (RE_ANSWER.test(next)) break;
+        if (RE_QUESTION.test(next)) break;
+        optionText += '\n' + next.trim();
+        i++;
+      }
+
+      options[letter] = optionText;
     }
 
     if (blockInvalid) {
@@ -166,6 +178,18 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       const m = paragraphs[i].match(RE_EXPLANATION)!;
       explanation = m[1].trim();
       i++;
+
+      // Collect multi-line explanation text until Subject
+      while (i < paragraphs.length) {
+        const next = paragraphs[i];
+        if (RE_SUBJECT.test(next)) break;
+        if (RE_QUESTION.test(next)) break;
+        explanation += '\n' + next.trim();
+        i++;
+      }
+
+      explanation = explanation.trim();
+
       if (!explanation) {
         errors.push({
           questionNumber: qNumber,
