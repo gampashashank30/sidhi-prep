@@ -13,6 +13,7 @@
 // - Ads are full-height flex containers with forced page breaks around them
 
 import type { Question, PDFSettings, CoverSettings } from './types';
+import katex from 'katex';
 import {
   PAGE_WIDTH_MM, PAGE_HEIGHT_MM,
   BORDER_INSET_MM, CONTENT_PADDING_MM, CORNER_ICON_SIZE_MM,
@@ -36,80 +37,68 @@ export function escHtml(s: string): string {
     .replace(/\u2013/g, '&ndash;');
 }
 
-// ─── Math-aware renderer ───────────────────────────────────────────────────────
-// Splits text on $$...$$ (block) and $...$ (inline) delimiters.
-// Plain text segments are HTML-escaped; math segments are wrapped in spans with
-// data-math attributes that KaTeX auto-render picks up in the browser/Puppeteer.
+// ─── Math-aware renderer (SERVER-SIDE via KaTeX) ──────────────────────────────────────
+// Detects all LaTeX delimiter styles, normalises double-backslash escaping
+// (markdown converters output \\frac instead of \frac), and renders each
+// math fragment server-side with katex.renderToString() so Puppeteer gets
+// fully-rendered HTML with no browser-side JS required.
 
 export function renderMath(raw: string): string {
   if (!raw) return '';
-  // Segment the string by $$....$$ then $...$ delimiters
-  const segments: string[] = [];
-  let remaining = raw;
 
-  // We process in passes: block math first, then inline math
-  // Use a two-pass approach: split on $$ first, then $
-  const parts: Array<{ text: string; isBlock: boolean; isMath: boolean }> = [];
+  // Strip markdown bold/italic/heading remnants from the docx converter
+  const text = raw
+    .replace(/\*\*(.+?)\*\*/gs, '$1')
+    .replace(/\*(.+?)\*/gs,    '$1')
+    .replace(/^\s*#{1,6}\s*/gm, '');
 
-  // Step 1: split on $$...$$ (block)
-  const blockRe = /\$\$([\s\S]+?)\$\$/g;
-  let lastBlockIdx = 0;
-  let bm: RegExpExecArray | null;
-  const tempParts: Array<{ text: string; isMath: boolean; isBlock: boolean }> = [];
-  blockRe.lastIndex = 0;
-  while ((bm = blockRe.exec(remaining)) !== null) {
-    if (bm.index > lastBlockIdx) {
-      tempParts.push({ text: remaining.slice(lastBlockIdx, bm.index), isMath: false, isBlock: false });
+  const out: string[] = [];
+
+  // One-pass regex: match all four LaTeX delimiter styles in priority order
+  //   $$...$$ → block    (group 1)
+  //   $...$   → inline   (group 2)
+  //   \[...\] → block    (group 3)
+  //   \(...\) → inline   (group 4)
+  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = mathRe.exec(text)) !== null) {
+    // Emit preceding plain text
+    if (m.index > lastIdx) {
+      out.push(escHtml(text.slice(lastIdx, m.index)).replace(/\n/g, '<br/>'));
     }
-    tempParts.push({ text: bm[1], isMath: true, isBlock: true });
-    lastBlockIdx = bm.index + bm[0].length;
-  }
-  if (lastBlockIdx < remaining.length) {
-    tempParts.push({ text: remaining.slice(lastBlockIdx), isMath: false, isBlock: false });
-  }
 
-  // Step 2: for each non-math segment, split on $...$  (inline)
-  const inlineRe = /\$([^$\n]+?)\$/g;
-  for (const part of tempParts) {
-    if (part.isMath) {
-      parts.push(part);
-    } else {
-      let lastInlineIdx = 0;
-      let im: RegExpExecArray | null;
-      inlineRe.lastIndex = 0;
-      while ((im = inlineRe.exec(part.text)) !== null) {
-        if (im.index > lastInlineIdx) {
-          parts.push({ text: part.text.slice(lastInlineIdx, im.index), isMath: false, isBlock: false });
-        }
-        parts.push({ text: im[1], isMath: true, isBlock: false });
-        lastInlineIdx = im.index + im[0].length;
-      }
-      if (lastInlineIdx < part.text.length) {
-        parts.push({ text: part.text.slice(lastInlineIdx), isMath: false, isBlock: false });
-      }
+    const isBlock     = m[1] !== undefined || m[3] !== undefined;
+    // Normalise \\frac → \frac etc. (markdown escapes backslashes as \\)
+    const mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\/g, '\\');
+
+    try {
+      out.push(katex.renderToString(mathContent, {
+        throwOnError: false,
+        displayMode:  isBlock,
+        output:       'html',
+        strict:       false,
+      }));
+    } catch {
+      // Fallback: show raw math without crashing
+      out.push(`<code style="font-size:0.85em;color:#555;">${escHtml(mathContent)}</code>`);
     }
+
+    lastIdx = m.index + m[0].length;
   }
 
-  // Step 3: render each part
-  return parts.map(p => {
-    if (p.isMath) {
-      if (p.isBlock) {
-        return `<span class="math-block" data-math="${escHtml(p.text)}"></span>`;
-      }
-      return `<span class="math-inline" data-math="${escHtml(p.text)}"></span>`;
-    }
-    // Plain text: HTML-escape, preserve line breaks
-    return escHtml(p.text).replace(/\n/g, '<br/>');
-  }).join('');
+  // Remaining plain text
+  if (lastIdx < text.length) {
+    out.push(escHtml(text.slice(lastIdx)).replace(/\n/g, '<br/>'));
+  }
+
+  return out.join('');
 }
-// Also handle markdown bold/italic remnants from the docx converter
-// e.g. **Q1.** → strip the markers so they don't show in PDF
-export function stripMarkdown(s: string): string {
-  return s
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/^\s*#+\s*/gm, '');  // strip heading markers
-}
+
+// stripMarkdown is now handled inside renderMath above.
+// Kept as a no-op alias so existing call-sites don't break.
+export function stripMarkdown(s: string): string { return s; }
 
 // ─── Slug helper ──────────────────────────────────────────────────────────────
 
@@ -675,26 +664,8 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />`;
 
-  // KaTeX for math rendering — always loaded (lightweight, ~80KB)
-  const katexLink = `
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Render pre-tagged math spans
-      document.querySelectorAll('.math-inline').forEach(function(el) {
-        try {
-          katex.render(el.getAttribute('data-math'), el, { throwOnError: false, displayMode: false });
-        } catch(e) { el.textContent = el.getAttribute('data-math'); }
-      });
-      document.querySelectorAll('.math-block').forEach(function(el) {
-        try {
-          katex.render(el.getAttribute('data-math'), el, { throwOnError: false, displayMode: true });
-        } catch(e) { el.textContent = el.getAttribute('data-math'); }
-      });
-    });
-  </script>`;
+  // KaTeX CSS only — math HTML is rendered server-side, no JS needed
+  const katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -702,7 +673,7 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   <meta charset="UTF-8" />
   <title>Siddhi Question Bank</title>
   ${fontLink}
-  ${katexLink}
+  ${katexCss}
   <style>
     /* ── Reset ── */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }

@@ -83,26 +83,12 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const page = await browser.newPage();
 
   try {
-    // 'load' waits for all deferred scripts (including KaTeX from CDN) to execute.
+    // Math is rendered server-side (katex.renderToString) so we just need
+    // the DOM to be ready — 'domcontentloaded' is fast and reliable with setContent.
     await page.setContent(html, {
-      waitUntil: 'load',
-      timeout: 60000,
+      waitUntil: 'domcontentloaded',
+      timeout: 45000,
     });
-
-    // Wait for KaTeX to finish rendering all math spans (polls up to 5s)
-    await page.evaluate(() =>
-      new Promise<void>((resolve) => {
-        const check = () => {
-          const pending = document.querySelectorAll('.math-inline[data-math], .math-block[data-math]');
-          // KaTeX replaces the span's children; if any span is still empty it's not done yet
-          const allDone = Array.from(pending).every(el => el.children.length > 0 || el.textContent !== '');
-          if (allDone) return resolve();
-          setTimeout(check, 100);
-        };
-        // Give KaTeX a moment to start then poll
-        setTimeout(check, 200);
-      })
-    );
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
