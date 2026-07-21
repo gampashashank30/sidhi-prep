@@ -368,15 +368,15 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
        </div>`
     : `<div style="margin:4px 0 5px 0;">
         ${(['A','B','C','D'] as const).map(l =>
-          `<div style="display:flex;gap:5px;align-items:flex-start;margin-bottom:1px;">
-            <strong style="color:${primaryColor};flex-shrink:0;min-width:16px;font-size:8.5pt;">${l})</strong>
-            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${renderMath(stripMarkdown(q.options[l]))}</span>
+          `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:2px;">
+            <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;min-width:14px;">${l})</strong>
+            <span style="font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.options[l]))}</span>
            </div>`).join('')}
        </div>`;
 
   const answerBadge = `<span style="background:${primaryColor};color:white;padding:1px 7px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;flex-shrink:0;">Ans: ${q.answer}</span>`;
 
-  const diffBadge = settings.difficultyBadgeEnabled
+  const diffBadge = (settings.difficultyBadgeEnabled && q.difficulty)
     ? (() => { const c = DIFFICULTY_COLORS[q.difficulty]; return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;">${q.difficulty}</span>`; })()
     : '';
 
@@ -391,7 +391,8 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
   // The explanation link — targets #exp-N which is in document flow
   const expLink = `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`;
 
-  return `<div id="q-${q.number}" style="
+  return `<a id="q-${q.number}" name="q-${q.number}"></a>
+  <div id="q-${q.number}" style="
     break-inside:avoid;
     page-break-inside:avoid;
     border-bottom:0.5px solid #E0E0E0;
@@ -414,11 +415,23 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
 
 // ─── Topic heading ────────────────────────────────────────────────────────────
 
-function renderTopicHeading(path: string[], primaryColor: string): string {
-  const slug = slugify(path);
+function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: Set<string>): string {
+  const fullSlug = slugify(path);
   const label = path[path.length - 1];
   const parent = path.length > 1 ? path.slice(0, -1).join(' › ') : '';
-  return `<div id="topic-${slug}" style="
+
+  // Generate explicit anchor tags for all topic path prefixes so TOC items redirect correctly
+  const anchorTags: string[] = [];
+  for (let d = 1; d <= path.length; d++) {
+    const prefixPath = path.slice(0, d);
+    const prefixSlug = slugify(prefixPath);
+    if (!emittedSlugs.has(prefixSlug)) {
+      emittedSlugs.add(prefixSlug);
+      anchorTags.push(`<a id="topic-${prefixSlug}" name="topic-${prefixSlug}"></a>`);
+    }
+  }
+
+  return `${anchorTags.join('')}<div id="topic-${fullSlug}" style="
     break-after:avoid;page-break-after:avoid;
     background:${primaryColor}15;
     border-left:3px solid ${primaryColor};
@@ -433,7 +446,8 @@ function renderTopicHeading(path: string[], primaryColor: string): string {
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string): string {
-  return `<div id="exp-${q.number}" style="
+  return `<a id="exp-${q.number}" name="exp-${q.number}"></a>
+  <div id="exp-${q.number}" style="
     break-inside:avoid;page-break-inside:avoid;
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
@@ -645,7 +659,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   if (previewMode) {
     const sampleQ = questions[previewQuestionIndex] ?? questions[0];
     const previewHtml = sampleQ
-      ? renderTopicHeading(sampleQ.subjectPath, primaryColor) + renderQuestionBlock(sampleQ, settings)
+      ? renderTopicHeading(sampleQ.subjectPath, primaryColor, new Set<string>()) + renderQuestionBlock(sampleQ, settings)
       : '<p style="color:#888;font-size:9pt;padding:20px;">No question to preview.</p>';
 
     return wrapHtml({
@@ -670,6 +684,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // 3. Question sections — natural flow, grouped by topic
   sections.push(`<div style="break-before:page;page-break-before:always;">`);
 
+  const emittedTopicSlugs = new Set<string>();
   let prevTopicKey = '';
 
   for (let qi = 0; qi < questions.length; qi++) {
@@ -677,7 +692,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     const topicKey = q.subjectPath.join('|||');
 
     if (topicKey !== prevTopicKey) {
-      sections.push(renderTopicHeading(q.subjectPath, primaryColor));
+      sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
       prevTopicKey = topicKey;
     }
     sections.push(renderQuestionBlock(q, settings));
