@@ -13,7 +13,8 @@ const RE_OPT_C     = /^(?:\*\*|\*|__|_)?C\.(?:\*\*|\*|__|_)?(.*)$/;
 const RE_OPT_D     = /^(?:\*\*|\*|__|_)?D\.(?:\*\*|\*|__|_)?(.*)$/;
 const RE_OPT_E     = /^(?:\*\*|\*|__|_)?E\./;           // detect unexpected 5th option
 const RE_ANY_OPT   = /^(?:\*\*|\*|__|_)?[A-E]\./;       // generic option-like line
-const RE_ANSWER    = /^(?:\*\*|\*|__|_)?Ans:\s*(?:\*\*|\*|__|_)?([A-D])(?:\*\*|\*|__|_)?\s*$/i;
+// Accept: Ans:A  |  Ans: A  |  Answer: A  |  Ans.A  |  Answer.A  (case-insensitive)
+const RE_ANSWER    = /^(?:\*\*|\*|__|_)?(?:Ans(?:wer)?)[:.\s]\s*(?:\*\*|\*|__|_)?([A-D])(?:\*\*|\*|__|_)?\s*$/i;
 const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Medium|Hard)(?:\*\*|\*|__|_)?\s*$/i;
@@ -191,12 +192,12 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       explanation = explanation.trim();
 
       if (!explanation) {
+        // Allow empty explanation — use a fallback so the question still appears in PDF
+        explanation = 'Refer to the standard solution for this question.';
         errors.push({
           questionNumber: qNumber,
-          message: `Question ${qNumber} has an empty explanation (Exp: field is blank)`,
+          message: `Q${qNumber}: Exp: field is empty — a placeholder explanation was used. Add content after "Exp:" in your document.`,
         });
-        while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-        continue;
       }
     }
 

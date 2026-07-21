@@ -105,12 +105,46 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       timeout: 45000,
     });
 
+    const { primaryColor = '#1B5EA7', accentColor = '#14B89A' } = opts.settings;
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: { top: 0, right: 0, bottom: '0.1mm', left: 0 },
       preferCSSPageSize: true,
-      displayHeaderFooter: false, // page number rendered via CSS counter in template
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      // Footer renders in the bottom-margin area. It has transparent background
+      // so fixed social-icon and border elements below shine through.
+      // Positioned at padding-right:32mm → horizontally in the dead zone between
+      // the corner-icon zone (right 0–18mm) and the centered social icons.
+      footerTemplate: `
+        <div style="
+          width:100%;
+          height:100%;
+          box-sizing:border-box;
+          padding-right:32mm;
+          display:flex;
+          justify-content:flex-end;
+          align-items:center;
+          background:transparent;
+        ">
+          <div style="
+            display:inline-flex;
+            align-items:center;
+            gap:3px;
+            background:linear-gradient(135deg,${primaryColor} 0%,${accentColor} 100%);
+            border-radius:20px;
+            padding:3px 10px 3px 8px;
+            box-shadow:0 1px 6px rgba(0,0,0,0.28);
+            -webkit-print-color-adjust:exact;
+            print-color-adjust:exact;
+          ">
+            <span style="font-size:7px;font-weight:600;color:rgba(255,255,255,0.8);letter-spacing:0.8px;text-transform:uppercase;font-family:Arial,sans-serif;">Pg</span>
+            <span class="pageNumber" style="font-size:9px;font-weight:800;color:#ffffff;font-family:Arial,sans-serif;margin-left:2px;"></span>
+          </div>
+        </div>
+      `,
     });
 
     return Buffer.from(pdfBuffer);
