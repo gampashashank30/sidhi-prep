@@ -217,8 +217,12 @@ export default function Step3Customize() {
     updatePdfSettings({ [key]: value } as Partial<PDFSettings>);
   }, [updatePdfSettings]);
 
-  // ── Ad image upload — 100% client-side, instant, no server round-trip ──────
+  // ── Ad image upload — max 2 images, client-side compression ──────────────
+  const MAX_AD_IMAGES = 2;
   const handleAdUpload = useCallback(async (files: FileList) => {
+    const remaining = MAX_AD_IMAGES - pdfSettings.adImages.length;
+    if (remaining <= 0) return; // already at limit
+
     const compress = (file: File): Promise<string> =>
       new Promise((resolve, reject) => {
         const img = new Image();
@@ -241,14 +245,18 @@ export default function Step3Customize() {
       });
 
     const uploaded: AdImage[] = [];
-    for (const file of Array.from(files)) {
+    // Only process files up to the remaining slots
+    for (const file of Array.from(files).slice(0, remaining)) {
       try {
         const dataUrl = await compress(file);
         uploaded.push({ dataUrl });
       } catch { /* skip bad files */ }
     }
-    update('adImages', [...pdfSettings.adImages, ...uploaded]);
+    if (uploaded.length > 0) {
+      update('adImages', [...pdfSettings.adImages, ...uploaded]);
+    }
   }, [pdfSettings.adImages, update]);
+
 
   // ── PDF generation ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -421,7 +429,7 @@ export default function Step3Customize() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
             </svg>
           }>
-            <ToggleRow id="toggle-ads" label="Insert Advertisement Pages" description="Cycle round-robin through uploaded images" value={pdfSettings.adsEnabled} onChange={v => update('adsEnabled', v)} />
+            <ToggleRow id="toggle-ads" label="Insert Advertisement Pages" description="Both images appear together on each ad page" value={pdfSettings.adsEnabled} onChange={v => update('adsEnabled', v)} />
             {pdfSettings.adsEnabled && (
               <div className="mt-3 pl-4 border-l-2 border-gray-100 space-y-3">
                 <div>
@@ -431,24 +439,32 @@ export default function Step3Customize() {
                       id="ad-interval"
                       type="number"
                       min={1}
-                      value={pdfSettings.adIntervalPages}
-                      onChange={e => update('adIntervalPages', Math.max(1, parseInt(e.target.value) || 1))}
+                      value={pdfSettings.adIntervalQuestions}
+                      onChange={e => update('adIntervalQuestions', Math.max(1, parseInt(e.target.value) || 1))}
                       className="form-input inline-block w-16 mx-1 text-center"
                     />
-                    {' '}content pages
+                    {' '}questions
                   </label>
+                  <p className="text-xs text-gray-400 mt-1">e.g. 15 questions = ad appears after Q15, Q30, Q45…</p>
                 </div>
                 <div>
-                  <label className="form-label">Ad Images (16:9 recommended)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="form-label mb-0">Ad Images (max 2)</label>
+                    {pdfSettings.adImages.length >= 2 && (
+                      <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Max 2 reached</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">Both images are shown stacked on every ad page — each with its own link.</p>
                   <div className="flex flex-col gap-3 mt-1">
                     {pdfSettings.adImages.map((ad, i) => (
                       <div key={i} className="flex items-start gap-3 p-2 border border-gray-100 bg-gray-50 rounded-lg">
                         <div className="relative flex-shrink-0">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={ad.dataUrl} alt={`Ad ${i+1}`} className="w-24 h-[54px] object-cover rounded border border-gray-200" />
+                          <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-gray-700 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{i + 1}</span>
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs font-semibold text-gray-600 block mb-1">Ad Link URL</label>
+                          <label className="text-xs font-semibold text-gray-600 block mb-1">Ad {i + 1} Link URL</label>
                           <input
                             type="url"
                             placeholder="https://..."
@@ -470,13 +486,15 @@ export default function Step3Customize() {
                         </button>
                       </div>
                     ))}
-                    <div>
-                      <label className="btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2">
-                        <span className="text-lg leading-none">+</span> Add Ad Image(s)
-                        <input type="file" accept="image/*" multiple className="hidden"
-                          onChange={e => { if (e.target.files) handleAdUpload(e.target.files); e.target.value = ''; }} />
-                      </label>
-                    </div>
+                    {pdfSettings.adImages.length < 2 && (
+                      <div>
+                        <label className={`btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2`}>
+                          <span className="text-lg leading-none">+</span> Add Ad Image {pdfSettings.adImages.length === 0 ? '(1 of 2)' : '(2 of 2)'}
+                          <input type="file" accept="image/*" multiple className="hidden"
+                            onChange={e => { if (e.target.files) handleAdUpload(e.target.files); e.target.value = ''; }} />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

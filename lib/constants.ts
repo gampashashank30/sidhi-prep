@@ -43,7 +43,7 @@ export const DEFAULT_PDF_SETTINGS = {
   socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '' },
   adsEnabled: false,
   adImages: [],
-  adIntervalPages: 5,
+  adIntervalQuestions: 15,
   primaryColor: DEFAULT_PRIMARY,
   accentColor: DEFAULT_ACCENT,
 };

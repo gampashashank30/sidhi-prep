@@ -64,8 +64,8 @@ export type PDFSettings = {
 
   // 5.6 Ads
   adsEnabled: boolean;
-  adImages: AdImage[];      // in upload order (cycled round-robin)
-  adIntervalPages: number;  // insert after every N content pages (default 5)
+  adImages: AdImage[];           // max 2 images; both shown together on each ad page
+  adIntervalQuestions: number;   // insert ad page after every N questions (default 15)
 
   // 5.7 Colors
   primaryColor: string;   // hex
@@ -73,8 +73,8 @@ export type PDFSettings = {
 };
 
 export type AdImage = {
-  dataUrl: string;    // base64 data URL (already compressed by sharp)
-  linkUrl?: string;   // optional clickable URL
+  dataUrl: string;    // base64 data URL (already compressed by client-side canvas)
+  linkUrl?: string;   // optional clickable URL (each image independently linked)
 };
 
 // ─── Cover image settings ─────────────────────────────────────────────────────

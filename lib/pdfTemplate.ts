@@ -531,32 +531,87 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
 }
 
 // ─── Ad block ─────────────────────────────────────────────────────────────────
-// Ad fills only the content area so the fixed border/header/footer show through,
-// giving the ad page the same template/branding as content pages.
+// Renders a single dedicated ad page containing ALL uploaded ad images (1 or 2).
+// - 1 image: full content-area height, centered
+// - 2 images: stacked vertically in equal halves, each independently clickable
+// Strict page-break-before:always + break-after:always ensures the ad never
+// merges with surrounding question/explanation content.
 
-function renderAdBlock(dataUrl: string, linkUrl: string | undefined, layout: Layout): string {
-  const img = `<img src="${dataUrl}" style="max-width:100%;max-height:${layout.contentPageH}mm;width:auto;height:auto;object-fit:contain;display:block;" />`;
-  const content = linkUrl
-    ? `<a href="${escHtml(linkUrl.startsWith('http') ? linkUrl : 'https://' + linkUrl)}" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${img}</a>`
-    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${img}</div>`;
+function renderAdPage(adImages: import('./types').AdImage[], layout: Layout): string {
+  const pageH = layout.contentPageH;
+  const imgCount = Math.min(adImages.length, 2); // safety cap
+
+  const slots = adImages.slice(0, imgCount).map((ad) => {
+    const imgEl = `<img src="${ad.dataUrl}" style="
+      display:block;
+      max-width:100%;
+      max-height:100%;
+      width:auto;
+      height:auto;
+      object-fit:contain;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    " />`;
+
+    const inner = ad.linkUrl
+      ? `<a href="${escHtml(ad.linkUrl.startsWith('http') ? ad.linkUrl : 'https://' + ad.linkUrl)}" style="
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          width:100%;
+          height:100%;
+          text-decoration:none;
+        ">${imgEl}</a>`
+      : `<div style="
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          width:100%;
+          height:100%;
+        ">${imgEl}</div>`;
+
+    // Each slot takes equal share of the total ad page height
+    const slotH = Math.floor(pageH / imgCount);
+    return `<div style="
+      width:100%;
+      height:${slotH}mm;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      box-sizing:border-box;
+      ${imgCount === 2 ? 'border-bottom:1px solid #E2E8F0;' : ''}
+    ">${inner}</div>`;
+  });
 
   return `
     <div style="
-      height:${layout.contentPageH}mm;
-      break-before:page;page-break-before:always;
-      break-after:page;page-break-after:always;
-      display:flex;align-items:center;justify-content:center;
+      height:${pageH}mm;
+      break-before:page;
+      page-break-before:always;
+      break-after:page;
+      page-break-after:always;
+      break-inside:avoid;
+      page-break-inside:avoid;
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+      justify-content:center;
       background:#F8FAFC;
       border:1px solid #E2E8F0;
       border-radius:4px;
-      position:relative;z-index:2;
+      position:relative;
+      z-index:2;
       overflow:hidden;
-      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+      box-sizing:border-box;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
     ">
-      ${content}
+      ${slots.join('\n')}
     </div>
   `;
 }
+
 
 // ─── Main template builder ────────────────────────────────────────────────────
 
@@ -606,8 +661,6 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // 3. Question sections — natural flow, grouped by topic
   sections.push(`<div style="break-before:page;page-break-before:always;">`);
 
-  let contentPageCount = 0;
-  let adIndex = 0;
   let prevTopicKey = '';
 
   for (let qi = 0; qi < questions.length; qi++) {
@@ -620,18 +673,18 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     }
     sections.push(renderQuestionBlock(q, settings));
 
-    // Ad insertion: every N questions we estimate a new page was used
-    // We use a rough estimate: every 7 questions ≈ 1 content page
-    if (settings.adsEnabled && settings.adImages.length > 0) {
-      const pagesUsed = Math.floor((qi + 1) / 7);
-      if (pagesUsed > contentPageCount && pagesUsed % settings.adIntervalPages === 0) {
-        contentPageCount = pagesUsed;
-        const ad = settings.adImages[adIndex % settings.adImages.length];
-        sections.push('</div>'); // close current section
-        sections.push(renderAdBlock(ad.dataUrl, ad.linkUrl, layout));
-        sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
-        adIndex++;
-      }
+    // Ad insertion: after every N questions, inject a full ad page.
+    // (qi+1) is question count processed so far. We insert AFTER the Nth question
+    // so the ad always appears between complete question blocks — never mid-question.
+    if (
+      settings.adsEnabled &&
+      settings.adImages.length > 0 &&
+      (qi + 1) % settings.adIntervalQuestions === 0 &&
+      qi + 1 < questions.length // don't add a trailing ad after the very last question
+    ) {
+      sections.push('</div>'); // close current question section cleanly
+      sections.push(renderAdPage(settings.adImages, layout));
+      sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
     }
   }
 
@@ -643,21 +696,20 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
       Explanations
     </h2>`);
 
-  let expPageCount = 0;
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi];
     sections.push(renderExplanationEntry(q, primaryColor, accentColor));
 
-    if (settings.adsEnabled && settings.adImages.length > 0) {
-      const pagesUsed = Math.floor((qi + 1) / 7);
-      if (pagesUsed > expPageCount && pagesUsed % settings.adIntervalPages === 0) {
-        expPageCount = pagesUsed;
-        const ad = settings.adImages[adIndex % settings.adImages.length];
-        sections.push('</div>'); // close current section
-        sections.push(renderAdBlock(ad.dataUrl, ad.linkUrl, layout));
-        sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
-        adIndex++;
-      }
+    // Same exact-count ad insertion in the explanations section
+    if (
+      settings.adsEnabled &&
+      settings.adImages.length > 0 &&
+      (qi + 1) % settings.adIntervalQuestions === 0 &&
+      qi + 1 < questions.length
+    ) {
+      sections.push('</div>'); // close current explanation section cleanly
+      sections.push(renderAdPage(settings.adImages, layout));
+      sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
     }
   }
 
