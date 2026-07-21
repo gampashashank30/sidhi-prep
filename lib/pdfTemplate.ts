@@ -252,19 +252,23 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">QUESTION BANK</span>
     </div>`);
 
-  // ── Footer bar — placed OUTSIDE the border (below border frame) ─────────────
-  // When border is enabled, footer is between page edge and border outer edge
+  // ── Footer bar — social icons centered, page number in bottom-right ──────────
+  // When border is enabled, footer zone is between page edge and border outer edge
   // (0–10mm zone). When border is disabled, footer is inside page normally.
   const socialItems = buildSocialItems(settings.socialLinks, accentColor);
   const fLeft  = layout.borderInset ? '3mm' : '6mm';
   const fRight = layout.borderInset ? '3mm' : '6mm';
+  const fBottom = `${layout.footerBottom}mm`;
+  const fHeight = `${layout.footerHeight}mm`;
+
+  // Social icons — centered in the footer zone
   parts.push(`
     <div class="running-footer" style="
       position:fixed;
-      bottom:${layout.footerBottom}mm;
+      bottom:${fBottom};
       left:${fLeft};
       right:${fRight};
-      height:${layout.footerHeight}mm;
+      height:${fHeight};
       display:flex;align-items:center;justify-content:center;
       gap:4mm;
       z-index:150;
@@ -275,6 +279,67 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
         ? `<span style="display:flex;align-items:center;gap:3.5mm;">${socialItems}</span>`
         : ''}
     </div>`);
+
+  // Page number badge — bottom-right corner, CSS counter(page) for accuracy
+  // Uses a gradient pill design that's colorful, crisp and never overlaps social icons
+  const pgRight = layout.borderInset ? `${layout.borderInset + 3}mm` : '5mm';
+  const pgBottom = layout.borderInset
+    ? `${layout.borderInset + 1}mm`
+    : `${layout.footerBottom + 1}mm`;
+
+  parts.push(`
+    <div class="running-pageno" style="
+      position:fixed;
+      bottom:${pgBottom};
+      right:${pgRight};
+      z-index:200;
+      display:flex;
+      align-items:center;
+      gap:0;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    ">
+      <div style="
+        display:inline-flex;
+        align-items:center;
+        gap:2px;
+        background:linear-gradient(135deg,${primaryColor} 0%,${accentColor} 100%);
+        border-radius:20px;
+        padding:2px 7px 2px 6px;
+        box-shadow:0 1px 4px rgba(0,0,0,0.22);
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
+      ">
+        <span style="
+          font-family:'Inter',Arial,sans-serif;
+          font-size:6pt;
+          font-weight:600;
+          color:rgba(255,255,255,0.82);
+          letter-spacing:0.6px;
+          text-transform:uppercase;
+          line-height:1;
+        ">Pg</span>
+        <span style="
+          font-family:'Inter',Arial,sans-serif;
+          font-size:7.5pt;
+          font-weight:800;
+          color:#ffffff;
+          letter-spacing:0.3px;
+          line-height:1;
+          counter-reset:none;
+        " class="css-page-counter"></span>
+      </div>
+    </div>
+    <style>
+      @page { counter-increment: page; }
+      .css-page-counter::after {
+        content: counter(page);
+        font-family: 'Inter', Arial, sans-serif;
+        font-size: 7.5pt;
+        font-weight: 800;
+        color: #ffffff;
+      }
+    </style>`);
 
   // ── Border + Corner icons ─────────────────────────────────────────────────────
   if (settings.borderEnabled) {
