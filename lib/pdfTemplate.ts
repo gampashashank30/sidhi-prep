@@ -280,11 +280,24 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
         : ''}
     </div>`);
 
-  // Page number badge — bottom-right corner, CSS counter(page) for accuracy
-  // Uses a gradient pill design that's colorful, crisp and never overlaps social icons
-  const pgRight = layout.borderInset ? `${layout.borderInset + 3}mm` : '5mm';
+  // Page number badge — placed BETWEEN the corner icon and social icons center.
+  //
+  // Corner icon geometry (border mode):
+  //   center = BORDER_INSET_MM(10) from page edge
+  //   radius = CORNER_ICON_SIZE_MM/2 = 8mm
+  //   → icon occupies right: 2mm to right: 18mm from page edge
+  //
+  // Badge must be at right > 18mm to avoid overlap.
+  // We use BORDER_INSET_MM + CORNER_ICON_SIZE_MM + 4mm = 30mm → clear by 12mm.
+  //
+  // Vertically: keep it in the footer zone (bottom 3-6mm) — since we are
+  // horizontally clear of the corner icon, vertical position doesn't matter.
+
+  const pgRight = layout.borderInset
+    ? `${BORDER_INSET_MM + CORNER_ICON_SIZE_MM + 4}mm`   // = 30mm, well past corner icon
+    : '6mm';
   const pgBottom = layout.borderInset
-    ? `${layout.borderInset + 1}mm`
+    ? `${layout.footerBottom + 2}mm`                      // in the footer zone below border
     : `${layout.footerBottom + 1}mm`;
 
   parts.push(`
@@ -295,47 +308,44 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       z-index:200;
       display:flex;
       align-items:center;
-      gap:0;
       -webkit-print-color-adjust:exact;
       print-color-adjust:exact;
     ">
       <div style="
         display:inline-flex;
         align-items:center;
-        gap:2px;
+        gap:3px;
         background:linear-gradient(135deg,${primaryColor} 0%,${accentColor} 100%);
         border-radius:20px;
-        padding:2px 7px 2px 6px;
-        box-shadow:0 1px 4px rgba(0,0,0,0.22);
+        padding:3px 9px 3px 7px;
+        box-shadow:0 1px 5px rgba(0,0,0,0.25);
         -webkit-print-color-adjust:exact;
         print-color-adjust:exact;
       ">
         <span style="
           font-family:'Inter',Arial,sans-serif;
-          font-size:6pt;
+          font-size:5.5pt;
           font-weight:600;
-          color:rgba(255,255,255,0.82);
-          letter-spacing:0.6px;
+          color:rgba(255,255,255,0.78);
+          letter-spacing:0.8px;
           text-transform:uppercase;
           line-height:1;
         ">Pg</span>
         <span style="
           font-family:'Inter',Arial,sans-serif;
-          font-size:7.5pt;
+          font-size:8pt;
           font-weight:800;
           color:#ffffff;
-          letter-spacing:0.3px;
+          letter-spacing:0.2px;
           line-height:1;
-          counter-reset:none;
         " class="css-page-counter"></span>
       </div>
     </div>
     <style>
-      @page { counter-increment: page; }
       .css-page-counter::after {
         content: counter(page);
         font-family: 'Inter', Arial, sans-serif;
-        font-size: 7.5pt;
+        font-size: 8pt;
         font-weight: 800;
         color: #ffffff;
       }
