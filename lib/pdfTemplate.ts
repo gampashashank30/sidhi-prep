@@ -738,14 +738,23 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     body { transform-origin: top left; }
   ` : '';
 
-  // Skip Google Fonts in preview mode for speed — use system font stack instead
+  // Inline KaTeX CSS from local node_modules to eliminate network requests during PDF render
+  let katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />`;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const cssPath = path.join(process.cwd(), 'node_modules', 'katex', 'dist', 'katex.min.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+    katexCss = `<style>${cssContent}</style>`;
+  } catch {
+    // fallback if file read fails
+  }
+
+  // Preconnect Google Fonts with font-display swap for fast fallback rendering
   const fontLink = previewMode ? '' : `
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />`;
-
-  // KaTeX CSS only — math HTML is rendered server-side, no JS needed
-  const katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />`;
 
   return `<!DOCTYPE html>
 <html lang="en">

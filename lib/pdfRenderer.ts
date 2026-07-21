@@ -17,9 +17,24 @@ const PUPPETEER_ARGS = [
   '--no-zygote',
   '--single-process',
   '--disable-gpu',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-breakpad',
+  '--disable-component-extensions-with-background-pages',
+  '--disable-extensions',
+  '--disable-ipc-flooding-protection',
+  '--disable-renderer-backgrounding',
+  '--mute-audio',
 ];
 
 let cachedBrowser: Browser | null = null;
+
+export function prewarmBrowser() {
+  launchBrowser().catch((err) => {
+    console.warn('[pdfRenderer] Pre-warm browser background launch error:', err);
+  });
+}
 
 async function launchBrowser() {
   if (cachedBrowser && cachedBrowser.connected) {

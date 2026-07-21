@@ -3,11 +3,14 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 import type { PDFSettings, CoverSettings, Question } from '@/lib/types';
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
-import { renderPDF } from '@/lib/pdfRenderer';
+import { renderPDF, prewarmBrowser } from '@/lib/pdfRenderer';
 import { processLogoImage } from '@/lib/imageProcessor';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // PDF generation can take time
+
+// Pre-warm browser in the background when route module loads
+prewarmBrowser();
 
 let cachedLogoDataUrl: string | null = null;
 
