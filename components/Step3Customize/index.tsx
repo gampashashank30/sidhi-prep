@@ -46,356 +46,164 @@ function buildSlices(questions: Question[]): TopicSlice[] {
     }));
 }
 
-// ── Pure SVG Donut / Pie chart ─────────────────────────────────────────────────
+// ── Chart helpers ─────────────────────────────────────────────────────────────
 
-function DonutPieChart({ slices, total, type }: { slices: TopicSlice[]; total: number; type: 'donut' | 'pie' }) {
-  const SIZE   = 220;
-  const CX     = SIZE / 2;
-  const CY     = SIZE / 2;
-  const R_OUTER = 88;
-  const R_INNER = type === 'donut' ? 52 : 0;
+function buildArcPath(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number, type: 'donut' | 'pie'): string {
+  const sweep = Math.min(endDeg - startDeg, 359.999);
+  const large = sweep > 180 ? 1 : 0;
+  const toXY = (r: number, deg: number) => ({ x: cx + r * Math.cos((deg * Math.PI) / 180), y: cy + r * Math.sin((deg * Math.PI) / 180) });
+  const s = toXY(rOuter, startDeg); const e = toXY(rOuter, startDeg + sweep);
+  if (type === 'pie') return `M ${cx} ${cy} L ${s.x} ${s.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${e.x} ${e.y} Z`;
+  const si = toXY(rInner, startDeg); const ei = toXY(rInner, startDeg + sweep);
+  return `M ${s.x} ${s.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${rInner} ${rInner} 0 ${large} 0 ${si.x} ${si.y} Z`;
+}
+
+function DonutChart({ slices, total }: { slices: TopicSlice[]; total: number }) {
+  const SIZE = 220; const CX = 110; const CY = 110;
   const [hovered, setHovered] = useState<number | null>(null);
-
   if (slices.length === 0) return null;
-
-  // Build arc paths
-  let cumulativeAngle = -90; // start from top
-  const arcs = slices.map((slice, i) => {
-    const angle = (slice.pct / 100) * 360;
-    const startAngle = cumulativeAngle;
-    cumulativeAngle += angle;
-    const endAngle = cumulativeAngle;
-    const startRad = (startAngle * Math.PI) / 180;
-    const endRad   = (endAngle   * Math.PI) / 180;
-    const largeArc = angle > 180 ? 1 : 0;
-
-    if (type === 'donut') {
-      const x1 = CX + R_OUTER * Math.cos(startRad);
-      const y1 = CY + R_OUTER * Math.sin(startRad);
-      const x2 = CX + R_OUTER * Math.cos(endRad);
-      const y2 = CY + R_OUTER * Math.sin(endRad);
-      const x3 = CX + R_INNER * Math.cos(endRad);
-      const y3 = CY + R_INNER * Math.sin(endRad);
-      const x4 = CX + R_INNER * Math.cos(startRad);
-      const y4 = CY + R_INNER * Math.sin(startRad);
-      return { d: `M ${x1} ${y1} A ${R_OUTER} ${R_OUTER} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${R_INNER} ${R_INNER} 0 ${largeArc} 0 ${x4} ${y4} Z`, i, slice, angle };
-    } else {
-      const x1 = CX + R_OUTER * Math.cos(startRad);
-      const y1 = CY + R_OUTER * Math.sin(startRad);
-      const x2 = CX + R_OUTER * Math.cos(endRad);
-      const y2 = CY + R_OUTER * Math.sin(endRad);
-      return { d: `M ${CX} ${CY} L ${x1} ${y1} A ${R_OUTER} ${R_OUTER} 0 ${largeArc} 1 ${x2} ${y2} Z`, i, slice, angle };
-    }
-  });
-
+  let angle = -90;
   return (
     <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: SIZE, height: SIZE, display: 'block', margin: '0 auto' }}>
-      {arcs.map(({ d, i, slice }) => {
-        const scale = hovered === i ? 1.04 : 1;
-        return (
-          <path
-            key={i} d={d}
-            fill={slice.color}
-            stroke="#fff" strokeWidth={2}
-            style={{
-              transformOrigin: `${CX}px ${CY}px`,
-              transform: `scale(${scale})`,
-              transition: 'transform 0.2s ease, opacity 0.2s',
-              opacity: hovered !== null && hovered !== i ? 0.6 : 1,
-              cursor: 'pointer',
-            }}
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            <title>{slice.label}: {slice.count} ({slice.pct}%)</title>
-          </path>
-        );
+      {slices.map((sl, i) => {
+        const sweep = (sl.count / total) * 360;
+        const d = buildArcPath(CX, CY, 88, 52, angle, angle + sweep, 'donut'); angle += sweep;
+        return <path key={i} d={d} fill={sl.color} stroke="#fff" strokeWidth={2} style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${hovered === i ? 1.04 : 1})`, transition: 'transform 0.2s', opacity: hovered !== null && hovered !== i ? 0.6 : 1, cursor: 'pointer' }} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}><title>{sl.label}: {sl.count} ({sl.pct}%)</title></path>;
       })}
-      {type === 'donut' && (
-        <>
-          <text x={CX} y={CY - 10} textAnchor="middle" dominantBaseline="auto"
-            style={{ fontSize: 26, fontWeight: 700, fill: '#0F172A', fontFamily: 'inherit' }}>
-            {hovered !== null ? slices[hovered].count : total}
-          </text>
-          <text x={CX} y={CY + 14} textAnchor="middle" dominantBaseline="auto"
-            style={{ fontSize: 11, fill: '#94A3B8', fontFamily: 'inherit' }}>
-            {hovered !== null ? slices[hovered].label.slice(0, 12) : 'questions'}
-          </text>
-        </>
-      )}
+      <text x={CX} y={CY - 10} textAnchor="middle" dominantBaseline="auto" style={{ fontSize: 26, fontWeight: 700, fill: '#0F172A', fontFamily: 'inherit' }}>{hovered !== null ? slices[hovered].count : total}</text>
+      <text x={CX} y={CY + 14} textAnchor="middle" dominantBaseline="auto" style={{ fontSize: 11, fill: '#94A3B8', fontFamily: 'inherit' }}>{hovered !== null ? slices[hovered].label.slice(0, 12) : 'questions'}</text>
     </svg>
   );
 }
 
-// ── Pure SVG Column chart ──────────────────────────────────────────────────────
+function PieChart({ slices, total }: { slices: TopicSlice[]; total: number }) {
+  const SIZE = 220; const CX = 110; const CY = 110;
+  const [hovered, setHovered] = useState<number | null>(null);
+  if (slices.length === 0) return null;
+  let angle = -90;
+  return (
+    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: SIZE, height: SIZE, display: 'block', margin: '0 auto' }}>
+      {slices.map((sl, i) => {
+        const sweep = (sl.count / total) * 360;
+        const d = buildArcPath(CX, CY, 88, 0, angle, angle + sweep, 'pie'); angle += sweep;
+        return <path key={i} d={d} fill={sl.color} stroke="#fff" strokeWidth={2} style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${hovered === i ? 1.04 : 1})`, transition: 'transform 0.2s', opacity: hovered !== null && hovered !== i ? 0.6 : 1, cursor: 'pointer' }} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}><title>{sl.label}: {sl.count} ({sl.pct}%)</title></path>;
+      })}
+    </svg>
+  );
+}
 
 function ColumnChart({ slices }: { slices: TopicSlice[] }) {
-  const CHART_W = 340;
-  const CHART_H = 160;
-  const PAD_L   = 32;
-  const PAD_B   = 56;
-  const PAD_T   = 12;
-  const PAD_R   = 8;
-  const innerW  = CHART_W - PAD_L - PAD_R;
-  const innerH  = CHART_H - PAD_B - PAD_T;
+  const W = 340; const H = 160; const PL = 32; const PB = 56; const PT = 12; const PR = 8;
+  const iW = W - PL - PR; const iH = H - PB - PT;
   const [hovered, setHovered] = useState<number | null>(null);
-
   if (slices.length === 0) return null;
-
-  const maxCount = Math.max(...slices.map((s) => s.count));
-  const barW     = Math.min(36, (innerW / slices.length) * 0.6);
-  const gap      = innerW / slices.length;
-
+  const maxC = Math.max(...slices.map((s) => s.count));
+  const barW = Math.min(36, (iW / slices.length) * 0.6); const gap = iW / slices.length;
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} style={{ width: '100%', maxWidth: CHART_W, height: CHART_H, display: 'block', margin: '0 auto' }}>
-      {/* Y gridlines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
-        const y = PAD_T + innerH * (1 - pct);
-        return (
-          <g key={pct}>
-            <line x1={PAD_L} x2={CHART_W - PAD_R} y1={y} y2={y} stroke="#E2E8F0" strokeWidth={1} />
-            <text x={PAD_L - 4} y={y + 1} textAnchor="end" dominantBaseline="middle"
-              style={{ fontSize: 9, fill: '#94A3B8', fontFamily: 'inherit' }}>
-              {Math.round(maxCount * pct)}
-            </text>
-          </g>
-        );
-      })}
-      {/* Bars */}
-      {slices.map((slice, i) => {
-        const barH  = maxCount > 0 ? (slice.count / maxCount) * innerH : 0;
-        const x     = PAD_L + gap * i + (gap - barW) / 2;
-        const y     = PAD_T + innerH - barH;
-        const label = slice.label.length > 8 ? slice.label.slice(0, 7) + '…' : slice.label;
-        return (
-          <g key={i}
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-            style={{ cursor: 'pointer' }}
-          >
-            {/* Bar */}
-            <rect
-              x={x} y={y} width={barW} height={barH}
-              rx={4} fill={slice.color}
-              style={{ opacity: hovered !== null && hovered !== i ? 0.5 : 1, transition: 'opacity 0.2s, height 0.4s' }}
-            />
-            {/* Value label on top */}
-            {hovered === i && (
-              <text x={x + barW / 2} y={y - 4} textAnchor="middle"
-                style={{ fontSize: 10, fontWeight: 700, fill: slice.color, fontFamily: 'inherit' }}>
-                {slice.count}
-              </text>
-            )}
-            {/* X-axis label */}
-            <text
-              x={x + barW / 2}
-              y={PAD_T + innerH + 8}
-              textAnchor="middle"
-              dominantBaseline="hanging"
-              style={{ fontSize: 9, fill: hovered === i ? slice.color : '#64748B', fontFamily: 'inherit', fontWeight: hovered === i ? 700 : 400 }}
-            >
-              {label}
-            </text>
-            <title>{slice.label}: {slice.count} ({slice.pct}%)</title>
-          </g>
-        );
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, height: H, display: 'block', margin: '0 auto' }}>
+      {[0, 0.25, 0.5, 0.75, 1].map((p) => { const y = PT + iH * (1 - p); return <g key={p}><line x1={PL} x2={W - PR} y1={y} y2={y} stroke="#E2E8F0" strokeWidth={1} /><text x={PL - 4} y={y + 1} textAnchor="end" dominantBaseline="middle" style={{ fontSize: 9, fill: '#94A3B8', fontFamily: 'inherit' }}>{Math.round(maxC * p)}</text></g>; })}
+      {slices.map((sl, i) => {
+        const bH = maxC > 0 ? (sl.count / maxC) * iH : 0; const x = PL + gap * i + (gap - barW) / 2; const y = PT + iH - bH; const lbl = sl.label.length > 8 ? sl.label.slice(0, 7) + '\u2026' : sl.label;
+        return <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'pointer' }}><rect x={x} y={y} width={barW} height={bH} rx={4} fill={sl.color} style={{ opacity: hovered !== null && hovered !== i ? 0.5 : 1, transition: 'opacity 0.2s' }} />{hovered === i && <text x={x + barW / 2} y={y - 4} textAnchor="middle" style={{ fontSize: 10, fontWeight: 700, fill: sl.color, fontFamily: 'inherit' }}>{sl.count}</text>}<text x={x + barW / 2} y={PT + iH + 8} textAnchor="middle" dominantBaseline="hanging" style={{ fontSize: 9, fill: hovered === i ? sl.color : '#64748B', fontFamily: 'inherit', fontWeight: hovered === i ? 700 : 400 }}>{lbl}</text><title>{sl.label}: {sl.count} ({sl.pct}%)</title></g>;
       })}
     </svg>
   );
 }
 
-// ── Analytics Section ─────────────────────────────────────────────────────────
+function ChartLegend({ slices }: { slices: TopicSlice[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: slices.length > 4 ? '1fr 1fr' : '1fr', gap: '0.375rem 1rem', marginTop: '0.875rem' }}>
+      {slices.map((sl, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+          <span style={{ width: '0.625rem', height: '0.625rem', borderRadius: '0.1875rem', background: sl.color, flexShrink: 0 }} />
+          <span style={{ fontSize: '0.75rem', color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }} title={sl.label}>{sl.label}</span>
+          <span style={{ fontSize: '0.75rem', color: '#0F172A', fontWeight: 700, flexShrink: 0 }}>{sl.count}</span>
+          <span style={{ fontSize: '0.6875rem', color: '#fff', fontWeight: 600, background: sl.color, borderRadius: '9999px', padding: '0.0625rem 0.375rem', flexShrink: 0 }}>{sl.pct}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-function AnalyticsSection({ questions }: { questions: Question[] }) {
-  const [enabled, setEnabled]     = useState(false);
-  const [chartType, setChartType] = useState<ChartType>('donut');
+function ChartToggleRow({ id, label, icon, enabled, onChange }: {
+  id: string; label: string; icon: React.ReactNode; enabled: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '0.625rem', background: enabled ? 'rgba(99,102,241,0.06)' : 'transparent', transition: 'background 0.2s' }}>
+      <span style={{ color: enabled ? '#6366F1' : '#94A3B8', flexShrink: 0, transition: 'color 0.2s' }}>{icon}</span>
+      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: enabled ? '#0F172A' : '#64748B', flex: 1, transition: 'color 0.2s' }}>{label}</span>
+      <button id={id} role="switch" aria-checked={enabled} onClick={() => onChange(!enabled)}
+        style={{ position: 'relative', display: 'inline-flex', height: '1.25rem', width: '2.25rem', alignItems: 'center', borderRadius: '9999px', border: 'none', padding: 0, background: enabled ? '#6366F1' : '#CBD5E1', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}>
+        <span style={{ position: 'absolute', height: '0.9375rem', width: '0.9375rem', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transform: enabled ? 'translateX(1.0625rem)' : 'translateX(0.125rem)', transition: 'transform 0.2s' }} />
+      </button>
+    </div>
+  );
+}
 
+function AnalyticsSection({ questions, enabled, setEnabled, showDonut, setShowDonut, showPie, setShowPie, showColumn, setShowColumn }: {
+  questions: Question[];
+  enabled: boolean; setEnabled: (v: boolean) => void;
+  showDonut: boolean; setShowDonut: (v: boolean) => void;
+  showPie:   boolean; setShowPie:   (v: boolean) => void;
+  showColumn: boolean; setShowColumn: (v: boolean) => void;
+}) {
   const slices = useMemo(() => buildSlices(questions), [questions]);
+  const total  = questions.length;
+  const anyActive = showDonut || showPie || showColumn;
 
-  const CHART_TYPES: { key: ChartType; label: string; icon: React.ReactNode }[] = [
-    {
-      key: 'donut',
-      label: 'Donut',
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="4" />
-        </svg>
-      ),
-    },
-    {
-      key: 'pie',
-      label: 'Pie',
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-          <path d="M22 12A10 10 0 0 0 12 2v10z" />
-        </svg>
-      ),
-    },
-    {
-      key: 'column',
-      label: 'Column',
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6"  y1="20" x2="6"  y2="14" />
-          <line x1="2"  y1="20" x2="22" y2="20" />
-        </svg>
-      ),
-    },
+  const chartMeta = [
+    { key: 'donut' as const,  label: 'Donut Chart',  active: showDonut,  setActive: setShowDonut,  id: 'toggle-chart-donut',  accentColor: '#6366F1', bg: 'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04))', border: '1px solid rgba(99,102,241,0.14)', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>, chart: <DonutChart slices={slices} total={total} /> },
+    { key: 'pie' as const,    label: 'Pie Chart',    active: showPie,    setActive: setShowPie,    id: 'toggle-chart-pie',    accentColor: '#14B89A', bg: 'linear-gradient(135deg,rgba(20,184,154,0.05),rgba(6,182,212,0.04))', border: '1px solid rgba(20,184,154,0.14)', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>, chart: <PieChart slices={slices} total={total} /> },
+    { key: 'column' as const, label: 'Column Chart', active: showColumn, setActive: setShowColumn, id: 'toggle-chart-column', accentColor: '#D97706', bg: 'linear-gradient(135deg,rgba(245,158,11,0.05),rgba(249,115,22,0.04))', border: '1px solid rgba(245,158,11,0.14)', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>, chart: <ColumnChart slices={slices} /> },
   ];
 
   return (
-    <div style={{
-      borderRadius: '1.25rem',
-      border: '1.5px solid transparent',
-      backgroundImage: enabled
-        ? 'linear-gradient(#fff,#fff), linear-gradient(135deg,#6366F1,#14B89A)'
-        : 'linear-gradient(#fff,#fff), linear-gradient(135deg,#E2E8F0,#E2E8F0)',
-      backgroundOrigin: 'border-box',
-      backgroundClip: 'padding-box, border-box',
-      padding: '1.375rem 1.5rem',
-      boxShadow: enabled ? '0 4px 24px rgba(99,102,241,0.12)' : '0 1px 4px rgba(15,23,42,0.06)',
-      transition: 'box-shadow 0.3s ease',
-    }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: enabled ? '1.25rem' : 0 }}>
-        <div style={{
-          width: '2rem', height: '2rem', borderRadius: '0.625rem', flexShrink: 0,
-          background: enabled ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#6366F1',
-          transition: 'background 0.3s',
-        }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6"  y1="20" x2="6"  y2="14" />
-            <line x1="2"  y1="20" x2="22" y2="20" />
-          </svg>
+    <div style={{ borderRadius: '1.25rem', border: '1.5px solid transparent', backgroundImage: enabled ? 'linear-gradient(#fff,#fff), linear-gradient(135deg,#6366F1 0%,#8B5CF6 50%,#14B89A 100%)' : 'linear-gradient(#fff,#fff), linear-gradient(135deg,#E2E8F0,#E2E8F0)', backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box', padding: '1.25rem 1.375rem', boxShadow: enabled ? '0 6px 32px rgba(99,102,241,0.14)' : '0 1px 4px rgba(15,23,42,0.06)', transition: 'box-shadow 0.3s ease' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: enabled ? '1.125rem' : 0 }}>
+        <div style={{ width: '2.25rem', height: '2.25rem', borderRadius: '0.625rem', flexShrink: 0, background: enabled ? 'linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.15))' : 'rgba(99,102,241,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366F1', transition: 'background 0.3s' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#0F172A', lineHeight: 1.3 }}>Topic Analytics</h3>
-          <p style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '0.1rem' }}>Visualise question distribution by subject</p>
+          <p style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '0.1rem' }}>Visualise subject distribution — also appears in PDF</p>
         </div>
-        {/* Toggle */}
-        <button
-          id="analytics-toggle"
-          role="switch"
-          aria-checked={enabled}
-          onClick={() => setEnabled((v) => !v)}
-          style={{
-            position: 'relative', display: 'inline-flex', height: '1.5rem', width: '2.75rem',
-            alignItems: 'center', borderRadius: '9999px', border: 'none', padding: 0,
-            background: enabled ? '#6366F1' : '#CBD5E1',
-            cursor: 'pointer', flexShrink: 0,
-            transition: 'background 0.25s ease', boxShadow: enabled ? '0 0 0 3px rgba(99,102,241,0.2)' : 'none',
-          }}
-        >
-          <span style={{
-            position: 'absolute', height: '1.125rem', width: '1.125rem', borderRadius: '50%',
-            background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-            transform: enabled ? 'translateX(1.375rem)' : 'translateX(0.1875rem)',
-            transition: 'transform 0.2s ease',
-          }} />
+        <button id="analytics-toggle" role="switch" aria-checked={enabled} onClick={() => setEnabled(!enabled)}
+          style={{ position: 'relative', display: 'inline-flex', height: '1.5rem', width: '2.75rem', alignItems: 'center', borderRadius: '9999px', border: 'none', padding: 0, background: enabled ? '#6366F1' : '#CBD5E1', cursor: 'pointer', flexShrink: 0, transition: 'background 0.25s ease', boxShadow: enabled ? '0 0 0 3px rgba(99,102,241,0.22)' : 'none' }}>
+          <span style={{ position: 'absolute', height: '1.125rem', width: '1.125rem', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.22)', transform: enabled ? 'translateX(1.375rem)' : 'translateX(0.1875rem)', transition: 'transform 0.2s ease' }} />
         </button>
       </div>
-
-      {/* Chart panel */}
       {enabled && (
-        <div className="animate-fade-in">
-          {questions.length === 0 ? (
-            <div style={{
-              textAlign: 'center', padding: '2.5rem 1rem',
-              background: 'rgba(99,102,241,0.04)', borderRadius: '1rem',
-              border: '1.5px dashed rgba(99,102,241,0.2)',
-            }}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 0.75rem' }}>
-                <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" /><line x1="2" y1="20" x2="22" y2="20" />
-              </svg>
+        <div>
+          {total === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2.25rem 1rem', background: 'rgba(99,102,241,0.04)', borderRadius: '1rem', border: '1.5px dashed rgba(99,102,241,0.2)' }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 0.75rem' }}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
               <p style={{ fontSize: '0.875rem', color: '#94A3B8', fontWeight: 500 }}>No questions selected</p>
-              <p style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '0.25rem' }}>Select questions in Step 2 to see analytics</p>
+              <p style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '0.25rem' }}>Go to Step 2 and select questions to see analytics</p>
             </div>
           ) : (
             <>
-              {/* Chart type selector */}
-              <div style={{
-                display: 'flex', gap: '0.375rem', background: '#F1F5F9',
-                borderRadius: '0.75rem', padding: '0.3rem', marginBottom: '1.25rem',
-              }}>
-                {CHART_TYPES.map(({ key, label, icon }) => (
-                  <button
-                    key={key}
-                    id={`chart-type-${key}`}
-                    onClick={() => setChartType(key)}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
-                      padding: '0.4375rem 0.5rem', borderRadius: '0.5rem', border: 'none',
-                      fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
-                      background: chartType === key ? '#fff' : 'transparent',
-                      color: chartType === key ? '#6366F1' : '#64748B',
-                      boxShadow: chartType === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    {icon}{label}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '1.25rem' }}>
+                <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Show Charts</p>
+                {chartMeta.map((m) => <ChartToggleRow key={m.key} id={m.id} label={m.label} icon={m.icon} enabled={m.active} onChange={m.setActive} />)}
               </div>
-
-              {/* Chart render */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                {(chartType === 'donut' || chartType === 'pie') ? (
-                  <DonutPieChart slices={slices} total={questions.length} type={chartType} />
-                ) : (
-                  <ColumnChart slices={slices} />
-                )}
-              </div>
-
-              {/* Legend */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: slices.length > 4 ? '1fr 1fr' : '1fr',
-                gap: '0.375rem 1rem',
-              }}>
-                {slices.map((slice, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <span style={{
-                      width: '0.625rem', height: '0.625rem', borderRadius: '0.1875rem',
-                      background: slice.color, flexShrink: 0,
-                    }} />
-                    <span style={{
-                      fontSize: '0.75rem', color: '#475569', flex: 1,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      fontWeight: 500,
-                    }} title={slice.label}>
-                      {slice.label}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: '#0F172A', fontWeight: 700, flexShrink: 0 }}>
-                      {slice.count}
-                    </span>
-                    <span style={{
-                      fontSize: '0.6875rem', color: '#fff', fontWeight: 600,
-                      background: slice.color, borderRadius: '9999px',
-                      padding: '0.0625rem 0.375rem', flexShrink: 0,
-                    }}>
-                      {slice.pct}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Footer stat */}
-              <div style={{
-                marginTop: '1rem', paddingTop: '0.875rem',
-                borderTop: '1px solid rgba(99,102,241,0.12)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{slices.length} subject{slices.length !== 1 ? 's' : ''}</span>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6366F1' }}>{questions.length} questions total</span>
+              {anyActive ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {chartMeta.map((m) => m.active && (
+                    <div key={m.key} style={{ background: m.bg, borderRadius: '1rem', padding: '1.125rem 1rem 0.875rem', border: m.border }}>
+                      <p style={{ fontSize: '0.75rem', fontWeight: 700, color: m.accentColor, marginBottom: '0.75rem', textAlign: 'center', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{m.label}</p>
+                      {m.chart}
+                      <ChartLegend slices={slices} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '1.5rem', background: '#F8FAFC', borderRadius: '0.875rem', border: '1.5px dashed #E2E8F0' }}>
+                  <p style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>Enable at least one chart above to see the visualisation</p>
+                </div>
+              )}
+              <div style={{ marginTop: '1rem', paddingTop: '0.875rem', borderTop: '1px solid rgba(99,102,241,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{slices.length} subject{slices.length !== 1 ? 's' : ''}</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1' }}>{total} questions total</span>
               </div>
             </>
           )}
@@ -405,7 +213,7 @@ function AnalyticsSection({ questions }: { questions: Question[] }) {
   );
 }
 
-// ─── Cover Image Section (moved from Step 2) ──────────────────────────────────
+
 
 function CoverImageSection() {
   const { coverSettings, setCoverSettings } = useWizardStore();
@@ -743,6 +551,13 @@ export default function Step3Customize() {
   const [genError, setGenError] = useState<string | null>(null);
   const selectedQuestions = getSelectedQuestions();
 
+  // Analytics state — lifted so handleGenerate can read chart toggles
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
+  const [analyticsDonut,   setAnalyticsDonut]   = useState(true);
+  const [analyticsPie,     setAnalyticsPie]     = useState(false);
+  const [analyticsColumn,  setAnalyticsColumn]  = useState(false);
+
+
   const update = useCallback(<K extends keyof PDFSettings>(key: K, value: PDFSettings[K]) => {
     updatePdfSettings({ [key]: value } as Partial<PDFSettings>);
   }, [updatePdfSettings]);
@@ -799,6 +614,9 @@ export default function Step3Customize() {
           questions: selectedQuestions,
           coverSettings,
           settings: pdfSettings,
+          analyticsCharts: analyticsEnabled
+            ? { donut: analyticsDonut, pie: analyticsPie, column: analyticsColumn }
+            : undefined,
         }),
       });
       if (!res.ok) {
@@ -828,7 +646,8 @@ export default function Step3Customize() {
     } finally {
       setGenerating(false);
     }
-  }, [selectedQuestions, coverSettings, pdfSettings]);
+  }, [selectedQuestions, coverSettings, pdfSettings, analyticsEnabled, analyticsDonut, analyticsPie, analyticsColumn]);
+
 
   const socialFields: Array<{ key: keyof PDFSettings['socialLinks']; label: string; placeholder: string }> = [
     { key: 'instagram',      label: 'Instagram',        placeholder: 'https://instagram.com/...' },
@@ -857,7 +676,13 @@ export default function Step3Customize() {
         <div className="space-y-4">
 
           {/* Analytics section — first in sidebar */}
-          <AnalyticsSection questions={selectedQuestions} />
+          <AnalyticsSection
+            questions={selectedQuestions}
+            enabled={analyticsEnabled} setEnabled={setAnalyticsEnabled}
+            showDonut={analyticsDonut} setShowDonut={setAnalyticsDonut}
+            showPie={analyticsPie}     setShowPie={setAnalyticsPie}
+            showColumn={analyticsColumn} setShowColumn={setAnalyticsColumn}
+          />
 
           {/* Cover image */}
           <CoverImageSection />

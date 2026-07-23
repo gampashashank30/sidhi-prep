@@ -657,7 +657,187 @@ export interface TemplateOptions {
   settings: PDFSettings;
   previewMode?: boolean;
   previewQuestionIndex?: number;
+  analyticsCharts?: { donut: boolean; pie: boolean; column: boolean };
 }
+
+// ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
+
+function buildAnalyticsSlices(questions: Question[]): Array<{ label: string; count: number; pct: number; color: string }> {
+  const COLORS = ['#6366F1','#14B89A','#F59E0B','#EF4444','#10B981','#8B5CF6','#3B82F6','#EC4899','#F97316','#06B6D4'];
+  const map = new Map<string, number>();
+  for (const q of questions) {
+    const key = q.subjectPath[0] ?? 'Uncategorised';
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  const total = questions.length;
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count], i) => ({
+      label, count,
+      pct: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: COLORS[i % COLORS.length],
+    }));
+}
+
+function buildSvgArcPath(cx: number, cy: number, rOut: number, rIn: number, startDeg: number, endDeg: number, type: 'donut' | 'pie'): string {
+  const sweep = Math.min(endDeg - startDeg, 359.999);
+  const large = sweep > 180 ? 1 : 0;
+  const toXY = (r: number, deg: number) => ({
+    x: cx + r * Math.cos((deg * Math.PI) / 180),
+    y: cy + r * Math.sin((deg * Math.PI) / 180),
+  });
+  const s = toXY(rOut, startDeg); const e = toXY(rOut, startDeg + sweep);
+  if (type === 'pie') return `M ${cx} ${cy} L ${s.x} ${s.y} A ${rOut} ${rOut} 0 ${large} 1 ${e.x} ${e.y} Z`;
+  const si = toXY(rIn, startDeg); const ei = toXY(rIn, startDeg + sweep);
+  return `M ${s.x} ${s.y} A ${rOut} ${rOut} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${rIn} ${rIn} 0 ${large} 0 ${si.x} ${si.y} Z`;
+}
+
+function renderAnalyticsPage(
+  questions: Question[],
+  charts: { donut: boolean; pie: boolean; column: boolean },
+  primaryColor: string,
+): string {
+  if (questions.length === 0) return '';
+  const slices = buildAnalyticsSlices(questions);
+  const total = questions.length;
+  const any = charts.donut || charts.pie || charts.column;
+  if (!any) return '';
+
+  // ── Donut SVG (static) ──────────────────────────────────────────────────────
+  function buildDonutSvg(): string {
+    const SIZE = 180; const CX = 90; const CY = 90;
+    let paths = ''; let angle = -90;
+    for (const sl of slices) {
+      const sweep = (sl.count / total) * 360;
+      const d = buildSvgArcPath(CX, CY, 78, 44, angle, angle + sweep, 'donut');
+      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2"/>`;
+      angle += sweep;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">
+      ${paths}
+      <text x="${CX}" y="${CY - 7}" text-anchor="middle" dominant-baseline="auto" font-size="22" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${total}</text>
+      <text x="${CX}" y="${CY + 14}" text-anchor="middle" dominant-baseline="auto" font-size="9" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
+    </svg>`;
+  }
+
+  // ── Pie SVG (static) ────────────────────────────────────────────────────────
+  function buildPieSvg(): string {
+    const SIZE = 180; const CX = 90; const CY = 90;
+    let paths = ''; let angle = -90;
+    for (const sl of slices) {
+      const sweep = (sl.count / total) * 360;
+      const d = buildSvgArcPath(CX, CY, 82, 0, angle, angle + sweep, 'pie');
+      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2"/>`;
+      angle += sweep;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">${paths}</svg>`;
+  }
+
+  // ── Column SVG (static) ─────────────────────────────────────────────────────
+  function buildColumnSvg(): string {
+    const W = 380; const H = 150; const PL = 30; const PT = 10; const PB = 50; const PR = 8;
+    const iW = W - PL - PR; const iH = H - PT - PB;
+    const maxC = Math.max(...slices.map((s) => s.count));
+    const barW = Math.max(14, Math.min(42, (iW / slices.length) * 0.6));
+    const gap = iW / slices.length;
+    let bars = '';
+    // Gridlines
+    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+      const y = PT + iH * (1 - p);
+      bars += `<line x1="${PL}" x2="${W - PR}" y1="${y}" y2="${y}" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="${p === 0 ? '' : '3,3'}"/>`;
+      bars += `<text x="${PL - 4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="#94A3B8" font-family="Inter,sans-serif">${Math.round(maxC * p)}</text>`;
+    }
+    for (let i = 0; i < slices.length; i++) {
+      const sl = slices[i];
+      const bH = maxC > 0 ? (sl.count / maxC) * iH : 0;
+      const x = PL + gap * i + (gap - barW) / 2;
+      const y = PT + iH - bH;
+      const lbl = sl.label.length > 10 ? sl.label.slice(0, 9) + '\u2026' : sl.label;
+      bars += `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="4" fill="${sl.color}"/>`;
+      bars += `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="8" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count}</text>`;
+      bars += `<text x="${x + barW / 2}" y="${PT + iH + 9}" text-anchor="middle" dominant-baseline="hanging" font-size="8" fill="#64748B" font-family="Inter,sans-serif">${lbl}</text>`;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${bars}</svg>`;
+  }
+
+  // ── Legend HTML ─────────────────────────────────────────────────────────────
+  const legendItems = slices.map((s) =>
+    `<div style="display:flex;align-items:center;gap:6pt;min-width:0;">
+      <span style="width:8pt;height:8pt;border-radius:2pt;background:${s.color};flex-shrink:0;"></span>
+      <span style="font-size:7.5pt;color:#475569;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${escHtml(s.label)}</span>
+      <span style="font-size:7.5pt;font-weight:700;color:#0F172A;flex-shrink:0;">${s.count}</span>
+      <span style="font-size:7pt;color:white;font-weight:600;background:${s.color};border-radius:9999pt;padding:1pt 4pt;flex-shrink:0;">${s.pct}%</span>
+    </div>`
+  ).join('');
+
+  const legendCols = slices.length > 6 ? 3 : slices.length > 3 ? 2 : 1;
+
+  // ── Chart blocks HTML ────────────────────────────────────────────────────────
+  let chartBlocks = '';
+
+  if (charts.donut) {
+    chartBlocks += `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04));border:1px solid rgba(99,102,241,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
+        <p style="font-size:7.5pt;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Donut Chart</p>
+        ${buildDonutSvg()}
+        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
+      </div>`;
+  }
+
+  if (charts.pie) {
+    chartBlocks += `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(20,184,154,0.05),rgba(6,182,212,0.04));border:1px solid rgba(20,184,154,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
+        <p style="font-size:7.5pt;font-weight:700;color:#14B89A;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Pie Chart</p>
+        ${buildPieSvg()}
+        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
+      </div>`;
+  }
+
+  if (charts.column) {
+    chartBlocks += `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(245,158,11,0.05),rgba(249,115,22,0.04));border:1px solid rgba(245,158,11,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
+        <p style="font-size:7.5pt;font-weight:700;color:#D97706;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Column Chart</p>
+        ${buildColumnSvg()}
+        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
+      </div>`;
+  }
+
+  return `
+    <div style="break-before:page;page-break-before:always;position:relative;z-index:2;">
+      <!-- Analytics Page Header -->
+      <div style="display:flex;align-items:center;gap:8pt;margin-bottom:16pt;padding-bottom:8pt;border-bottom:2.5px solid ${escHtml(primaryColor)};">
+        <div style="width:28pt;height:28pt;border-radius:8pt;background:linear-gradient(135deg,#6366F1,#8B5CF6);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
+          </svg>
+        </div>
+        <div>
+          <h2 style="font-size:13pt;font-weight:700;color:${escHtml(primaryColor)};margin:0;line-height:1.2;">Topic Analytics</h2>
+          <p style="font-size:8pt;color:#64748B;margin:2pt 0 0 0;">Question distribution by subject — ${total} questions across ${slices.length} subject${slices.length !== 1 ? 's' : ''}</p>
+        </div>
+      </div>
+
+      <!-- Summary stat pills -->
+      <div style="display:flex;gap:8pt;flex-wrap:wrap;margin-bottom:16pt;">
+        ${slices.slice(0, 5).map((s) =>
+          `<div style="display:inline-flex;align-items:center;gap:5pt;padding:4pt 9pt;border-radius:9999pt;background:${s.color}1A;border:1.2px solid ${s.color}40;">
+            <span style="width:7pt;height:7pt;border-radius:50%;background:${s.color};"></span>
+            <span style="font-size:7.5pt;font-weight:600;color:#0F172A;">${escHtml(s.label)}</span>
+            <span style="font-size:7.5pt;font-weight:700;color:${s.color};">${s.count}</span>
+          </div>`
+        ).join('')}
+        ${slices.length > 5 ? `<div style="display:inline-flex;align-items:center;padding:4pt 9pt;border-radius:9999pt;background:#F1F5F9;border:1.2px solid #E2E8F0;"><span style="font-size:7.5pt;font-weight:600;color:#64748B;">+${slices.length - 5} more</span></div>` : ''}
+      </div>
+
+      <!-- Chart blocks grid -->
+      <div style="display:grid;grid-template-columns:${charts.donut && charts.pie && !charts.column ? '1fr 1fr' : charts.donut && charts.pie && charts.column ? '1fr 1fr' : '1fr'};gap:14pt;">
+        ${chartBlocks}
+      </div>
+    </div>`;
+}
+
+
 
 export function buildHTMLTemplate(opts: TemplateOptions): string {
   const { questions, coverSettings, logoDataUrl, settings,
@@ -692,6 +872,13 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   sections.push(`<div style="break-before:page;page-break-before:always;">
     ${renderTOC(flatTopics, primaryColor, accentColor)}
   </div>`);
+
+  // 2b. Analytics page (if any charts enabled)
+  const analyticsCharts = opts.analyticsCharts;
+  if (analyticsCharts && (analyticsCharts.donut || analyticsCharts.pie || analyticsCharts.column)) {
+    const analyticsHtml = renderAnalyticsPage(questions, analyticsCharts, primaryColor);
+    if (analyticsHtml) sections.push(analyticsHtml);
+  }
 
   // 3. Question sections — natural flow, grouped by topic
   sections.push(`<div style="break-before:page;page-break-before:always;">`);
