@@ -13,6 +13,8 @@
 // - Ads are full-height flex containers with forced page breaks around them
 
 import type { Question, PDFSettings, CoverSettings } from './types';
+import { unescapeMarkdown } from './text';
+
 import katex from 'katex';
 import {
   PAGE_WIDTH_MM, PAGE_HEIGHT_MM,
@@ -64,9 +66,9 @@ export function renderMath(raw: string): string {
   let m: RegExpExecArray | null;
 
   while ((m = mathRe.exec(text)) !== null) {
-    // Emit preceding plain text
+    // Emit preceding plain text — unescape markdown before HTML-escaping
     if (m.index > lastIdx) {
-      out.push(escHtml(text.slice(lastIdx, m.index)).replace(/\n/g, '<br/>'));
+      out.push(escHtml(unescapeMarkdown(text.slice(lastIdx, m.index))).replace(/\n/g, '<br/>'));
     }
 
     const isBlock     = m[1] !== undefined || m[3] !== undefined;
@@ -106,9 +108,9 @@ export function renderMath(raw: string): string {
     lastIdx = m.index + m[0].length;
   }
 
-  // Remaining plain text
+  // Remaining plain text — unescape markdown before HTML-escaping
   if (lastIdx < text.length) {
-    out.push(escHtml(text.slice(lastIdx)).replace(/\n/g, '<br/>'));
+    out.push(escHtml(unescapeMarkdown(text.slice(lastIdx))).replace(/\n/g, '<br/>'));
   }
 
   return out.join('');

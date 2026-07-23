@@ -3,6 +3,8 @@
 // Pure function — no I/O, fully testable without a file system
 
 import type { Question, ValidationError, ParseResult } from './types';
+import { normaliseTopicSegment } from './text';
+
 
 // ─── Regex patterns (from spec §2.2) ─────────────────────────────────────────
 
@@ -21,15 +23,12 @@ const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Me
 
 // ─── Topic normalisation (spec §2.4) ─────────────────────────────────────────
 
-function normalizeSegment(s: string): string {
-  // Trim whitespace, then title-case
-  return s.trim().replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-}
-
 function parseSubjectPath(raw: string): string[] {
   return raw
+    // Unescape \> first so the ">" separator is unambiguous
+    .replace(/\\>/g, '>')
     .split('>')
-    .map(normalizeSegment)
+    .map(normaliseTopicSegment)
     .filter((s) => s.length > 0);
 }
 

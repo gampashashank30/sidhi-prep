@@ -5,6 +5,8 @@ import { useWizardStore } from '@/store/wizardStore';
 import { buildTopicTree } from '@/lib/topicTree';
 import type { TopicNode } from '@/lib/topicTree';
 import type { Question } from '@/lib/types';
+import { unescapeMarkdown } from '@/lib/text';
+
 
 // ─── Difficulty metadata ──────────────────────────────────────────────────────
 
@@ -251,7 +253,7 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical' as const,
         }}>
-          {q.text}
+          {unescapeMarkdown(q.text)}
         </p>
 
         {/* Answer options preview — only first option shown on card */}
@@ -264,7 +266,7 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
             }}>
               <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {q.options[opt]}
+                {unescapeMarkdown(q.options[opt])}
               </span>
             </span>
           ))}
