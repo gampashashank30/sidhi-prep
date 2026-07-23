@@ -62,6 +62,8 @@ export type PDFSettings = {
     youtube: string;
     telegram: string;
     playStore: string;
+    appStore: string;
+    microsoftStore: string;
   };
 
   // 5.6 Ads

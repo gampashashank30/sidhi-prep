@@ -42,7 +42,7 @@ export const DEFAULT_PDF_SETTINGS = {
   topicBadgeEnabled: true,
   showAnswer: true,
   includeExplanations: true,
-  socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '' },
+  socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '', appStore: '', microsoftStore: '' },
   adsEnabled: false,
   adImages: [],
   adIntervalQuestions: 15,

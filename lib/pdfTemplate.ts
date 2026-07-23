@@ -203,6 +203,10 @@ const SOCIAL_ICONS: Record<string, string> = {
   youtube:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect x="0" y="3" width="24" height="18" rx="4" fill="#FF0000"/><polygon points="9.5,8 9.5,16 17,12" fill="white"/></svg>`,
   telegram:  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><circle cx="12" cy="12" r="12" fill="#24A1DE"/><path fill="white" d="M5.4 11.5L18.4 6.5C18.9 6.3 19.3 6.7 19.1 7.2L16.2 19C16.1 19.5 15.5 19.7 15.1 19.4L11.5 16.5 9 18V14.5L17.5 7.5C17.7 7.3 17.4 7.1 17.2 7.3L7 13.5 4.1 12.6C3.6 12.4 3.6 11.7 4.1 11.5Z"/></svg>`,
   playStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><path fill="#00C853" d="M3 23.5c.3.2.7.3 1.1.1L16.5 12 4.1.4C3.7.2 3.3.3 3 .5 2.7.8 2.5 1.2 2.5 1.6v20.8c0 .4.2.8.5 1.1z"/><path fill="#FF3D00" d="M14.2 10.2L17 7.8 5.4 1.3l8.8 8.9z"/><path fill="#FFC400" d="M17.8 13.1L21.5 12l-4.5-2.2-2.2 2.2 2.2 2.2 0.8-1.1z"/><path fill="#29B6F6" d="M5.4 22.7L17 16.2 14.2 13.8 5.4 22.7z"/></svg>`,
+  // Apple App Store — black apple silhouette on white rounded square
+  appStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#000"/><path fill="white" d="M16.05 12.86c-.02-1.9 1.55-2.82 1.62-2.87-0.88-1.29-2.26-1.47-2.75-1.49-1.17-.12-2.29.69-2.88.69-.6 0-1.52-.67-2.5-.65-1.28.02-2.47.75-3.13 1.9-1.34 2.33-.34 5.77.96 7.66.64.92 1.4 1.96 2.4 1.92.96-.04 1.33-.62 2.49-.62 1.17 0 1.5.62 2.52.6 1.03-.02 1.68-.94 2.31-1.87.73-1.07 1.03-2.11 1.05-2.17-.02-.01-2.07-.8-2.09-3.1zm-1.96-5.7c.53-.65.89-1.55.79-2.45-.77.03-1.7.51-2.25 1.15-.49.57-.93 1.48-.81 2.36.86.07 1.73-.44 2.27-1.06z"/></svg>`,
+  // Microsoft Store — four-colour Windows logo on white rounded square
+  microsoftStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#fff" stroke="#E2E8F0" stroke-width="1"/><rect x="3.5" y="3.5" width="7.5" height="7.5" fill="#F35325"/><rect x="13" y="3.5" width="7.5" height="7.5" fill="#81BC06"/><rect x="3.5" y="13" width="7.5" height="7.5" fill="#05A6F0"/><rect x="13" y="13" width="7.5" height="7.5" fill="#FFBA08"/></svg>`,
 };
 
 // Each icon is wrapped in a 7mm × 7mm div for consistent, large display in the footer
@@ -210,10 +214,12 @@ function buildSocialItems(links: PDFSettings['socialLinks'], accentColor: string
   const wrap = (icon: string, href: string) =>
     `<a href="${escHtml(href)}" style="display:inline-flex;width:7mm;height:7mm;flex-shrink:0;text-decoration:none;" title="">${icon}</a>`;
   const items: string[] = [];
-  if (links.telegram)  items.push(wrap(SOCIAL_ICONS.telegram,  links.telegram));
-  if (links.instagram) items.push(wrap(SOCIAL_ICONS.instagram, links.instagram));
-  if (links.youtube)   items.push(wrap(SOCIAL_ICONS.youtube,   links.youtube));
-  if (links.playStore) items.push(wrap(SOCIAL_ICONS.playStore, links.playStore));
+  if (links.telegram)       items.push(wrap(SOCIAL_ICONS.telegram,       links.telegram));
+  if (links.instagram)      items.push(wrap(SOCIAL_ICONS.instagram,      links.instagram));
+  if (links.youtube)        items.push(wrap(SOCIAL_ICONS.youtube,        links.youtube));
+  if (links.playStore)      items.push(wrap(SOCIAL_ICONS.playStore,      links.playStore));
+  if (links.appStore)       items.push(wrap(SOCIAL_ICONS.appStore,       links.appStore));
+  if (links.microsoftStore) items.push(wrap(SOCIAL_ICONS.microsoftStore, links.microsoftStore));
   return items.join('');
 }
 
