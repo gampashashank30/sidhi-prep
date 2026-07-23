@@ -4,8 +4,8 @@ import { useWizardStore } from '@/store/wizardStore';
 
 const STEPS = [
   { number: 1, label: 'Upload & Validate' },
-  { number: 2, label: 'Cover & Topics' },
-  { number: 3, label: 'Customise & Export' },
+  { number: 2, label: 'Topic Selection' },
+  { number: 3, label: 'Cover & Export' },
 ];
 
 export default function WizardNav() {

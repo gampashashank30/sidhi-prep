@@ -4,133 +4,6 @@ import React, { useCallback, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
 import { buildTopicTree } from '@/lib/topicTree';
 import type { TopicNode } from '@/lib/topicTree';
-import type { CoverSettings } from '@/lib/types';
-
-// ─── Cover Image Upload + Preview ────────────────────────────────────────────
-
-function CoverImageSection() {
-  const { coverSettings, setCoverSettings } = useWizardStore();
-  const [dragging, setDragging] = useState(false);
-  const [isDraggingFocal, setIsDraggingFocal] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
-
-  // A4 aspect ratio: 210/297 ≈ 0.7071
-  const A4_RATIO = 210 / 297;
-  const PREVIEW_HEIGHT = 320; // px
-  const PREVIEW_WIDTH = Math.round(PREVIEW_HEIGHT * A4_RATIO);
-
-  const processFile = useCallback(async (file: File) => {
-    try {
-      // Compress client-side — no server round-trip, instant on Render
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const img = new Image();
-        const blobUrl = URL.createObjectURL(file);
-        img.onload = () => {
-          const MAX = 1600;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          const w = Math.round(img.width * scale);
-          const h = Math.round(img.height * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) { URL.revokeObjectURL(blobUrl); reject(new Error('canvas')); return; }
-          ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(blobUrl);
-          resolve(canvas.toDataURL('image/jpeg', 0.9));
-        };
-        img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('load')); };
-        img.src = blobUrl;
-      });
-      setCoverSettings({ dataUrl, focalX: 0.5, focalY: 0.5 });
-    } catch (err) {
-      console.error('Cover image processing failed:', err);
-    }
-  }, [setCoverSettings]);
-
-  const handleFocalDrag = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingFocal || !previewRef.current || !coverSettings) return;
-    const rect = previewRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    setCoverSettings({ ...coverSettings, focalX: x, focalY: y });
-  }, [isDraggingFocal, coverSettings, setCoverSettings]);
-
-  return (
-    <div className="card">
-      <div className="card-header">
-        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-          <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
-        </div>
-        <div>
-          <h3 className="font-bold text-gray-900">Cover Image</h3>
-          <p className="text-xs text-gray-500">Optional — drag to reposition focal point</p>
-        </div>
-      </div>
-
-      <div className="flex gap-6 items-start flex-wrap">
-        {/* Upload dropzone */}
-        <div
-          className={`drop-zone w-48 h-32 ${dragging ? 'active' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); }}
-          onClick={() => document.getElementById('cover-upload')?.click()}
-        >
-          <input id="cover-upload" type="file" accept="image/jpeg,image/png" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ''; }} />
-          <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-          <p className="text-xs text-gray-500">Upload JPG/PNG</p>
-        </div>
-
-        {/* Live preview with focal point control */}
-        {coverSettings && (
-          <div className="space-y-2">
-            <div
-              ref={previewRef}
-              className="relative rounded-xl overflow-hidden border-2 border-[var(--primary)]/30 cursor-crosshair select-none"
-              style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
-              onMouseDown={() => setIsDraggingFocal(true)}
-              onMouseUp={() => setIsDraggingFocal(false)}
-              onMouseLeave={() => setIsDraggingFocal(false)}
-              onMouseMove={handleFocalDrag}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={coverSettings.dataUrl}
-                alt="Cover preview"
-                className="w-full h-full"
-                style={{
-                  objectFit: 'cover',
-                  objectPosition: `${Math.round(coverSettings.focalX * 100)}% ${Math.round(coverSettings.focalY * 100)}%`,
-                }}
-                draggable={false}
-              />
-              {/* Focal point crosshair */}
-              <div
-                className="absolute w-5 h-5 rounded-full border-2 border-white shadow-lg pointer-events-none"
-                style={{
-                  left: `calc(${coverSettings.focalX * 100}% - 10px)`,
-                  top: `calc(${coverSettings.focalY * 100}% - 10px)`,
-                  background: 'rgba(255,255,255,0.3)',
-                  backdropFilter: 'blur(2px)',
-                }}
-              />
-              {/* A4 ratio label */}
-              <div className="absolute bottom-1 right-1 text-white text-xs bg-black/40 rounded px-1.5 py-0.5 backdrop-blur-sm">
-                A4 Preview
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 text-center">Click &amp; drag to set focal point</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── Tri-state Checkbox ───────────────────────────────────────────────────────
 
@@ -185,9 +58,8 @@ function TopicTreeNode({
     selectedCount === allNums.length ? 'checked' : 'indeterminate';
 
   const handleCheck = () => {
-    // If currently checked or indeterminate → uncheck all; if unchecked → check all
     if (checkState === 'unchecked') {
-      onToggle(allNums);  // signal: add these
+      onToggle(allNums);           // positive = add
     } else {
       onToggle(allNums.map(n => -n)); // negative = remove
     }
@@ -222,7 +94,7 @@ function TopicTreeNode({
           {node.label}
         </span>
 
-        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 flex-shrink-0">
           {node.questionCount}
         </span>
       </div>
@@ -244,6 +116,17 @@ function TopicTreeNode({
   );
 }
 
+// ─── Difficulty colours ───────────────────────────────────────────────────────
+
+type Difficulty = 'Very Easy' | 'Easy' | 'Medium' | 'Hard';
+
+const DIFF_META: Record<Difficulty, { bg: string; activeBg: string; text: string; activeText: string; border: string }> = {
+  'Very Easy': { bg: '#F0FDF4', activeBg: '#16A34A', text: '#15803D', activeText: '#fff', border: '#86EFAC' },
+  'Easy':      { bg: '#EFF6FF', activeBg: '#2563EB', text: '#1D4ED8', activeText: '#fff', border: '#BFDBFE' },
+  'Medium':    { bg: '#FFFBEB', activeBg: '#D97706', text: '#B45309', activeText: '#fff', border: '#FCD34D' },
+  'Hard':      { bg: '#FEF2F2', activeBg: '#DC2626', text: '#B91C1C', activeText: '#fff', border: '#FCA5A5' },
+};
+
 // ─── Step 2 Main Component ────────────────────────────────────────────────────
 
 export default function Step2Cover() {
@@ -258,10 +141,56 @@ export default function Step2Cover() {
   const selectedSet = new Set(selectedQuestionNumbers);
   const canProceed = selectedQuestionNumbers.length > 0;
 
-  // Toggle handler from tree node
+  // ── Difficulty filter state ───────────────────────────────────────────────
+  // Derive which difficulties actually exist in the document
+  const availableDifficulties = React.useMemo((): Difficulty[] => {
+    const found = new Set(questions.map(q => q.difficulty as Difficulty));
+    const order: Difficulty[] = ['Very Easy', 'Easy', 'Medium', 'Hard'];
+    return order.filter(d => found.has(d));
+  }, [questions]);
+
+  // Active = difficulty is shown in PDF (included). Start with all active.
+  const [activeDiffs, setActiveDiffs] = useState<Set<Difficulty>>(
+    () => new Set(availableDifficulties)
+  );
+
+  // Re-sync when the document changes (new upload)
+  const prevAvailable = useRef(availableDifficulties);
+  React.useEffect(() => {
+    if (prevAvailable.current !== availableDifficulties) {
+      prevAvailable.current = availableDifficulties;
+      setActiveDiffs(new Set(availableDifficulties));
+    }
+  }, [availableDifficulties]);
+
+  const toggleDifficulty = useCallback((diff: Difficulty) => {
+    setActiveDiffs(prev => {
+      const next = new Set(prev);
+      const turning_on = !next.has(diff);
+      if (turning_on) {
+        next.add(diff);
+      } else {
+        next.delete(diff);
+      }
+
+      // Apply the change to selectedQuestionNumbers immediately
+      const currentSet = new Set(selectedQuestionNumbers);
+      if (turning_on) {
+        // Re-select all questions of this difficulty
+        questions.filter(q => q.difficulty === diff).forEach(q => currentSet.add(q.number));
+      } else {
+        // Deselect all questions of this difficulty
+        questions.filter(q => q.difficulty === diff).forEach(q => currentSet.delete(q.number));
+      }
+      setSelectedQuestions(Array.from(currentSet));
+
+      return next;
+    });
+  }, [questions, selectedQuestionNumbers, setSelectedQuestions]);
+
+  // ── Topic toggle handler ──────────────────────────────────────────────────
   const handleToggle = useCallback((nums: number[]) => {
     const currentSet = new Set(selectedQuestionNumbers);
-    // Positive = add, negative = remove
     for (const n of nums) {
       if (n < 0) currentSet.delete(-n);
       else currentSet.add(n);
@@ -273,75 +202,141 @@ export default function Step2Cover() {
   const noneSelected = selectedQuestionNumbers.length === 0;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-slide-up">
+    <div className="max-w-4xl mx-auto space-y-6 animate-slide-up">
       {/* ── Page title ─────────────────────────────────────────────── */}
       <div>
         <h2 className="section-heading">
-          <span className="w-8 h-8 rounded-lg bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold">2</span>
-          Cover &amp; Topic Selection
+          <span className="w-8 h-8 rounded-lg bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+          Topic &amp; Question Selection
         </h2>
         <p className="text-sm text-gray-500 mt-1 ml-10">
-          Add a cover image and choose which topics to include in your PDF.
+          Choose which difficulty levels and topics to include in your PDF.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ── Cover image ─────────────────────────────────────────── */}
-        <CoverImageSection />
+      {/* ── Main selection card ──────────────────────────────────────── */}
+      <div className="card">
 
-        {/* ── Topic selection ─────────────────────────────────────── */}
-        <div className="card flex flex-col">
-          <div className="card-header">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-              <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-gray-900">Select Topics</h3>
-              <p className="text-xs text-gray-500">
-                <span className={`font-semibold ${canProceed ? 'text-[var(--primary)]' : 'text-red-500'}`}>
-                  {selectedQuestionNumbers.length}
-                </span> of {questions.length} questions selected
-              </p>
-            </div>
-            {/* Select all / none buttons */}
-            <div className="flex gap-1.5">
-              <button className="btn-ghost text-xs px-2 py-1" onClick={selectAllQuestions} disabled={allSelected}>
-                All
-              </button>
-              <button className="btn-ghost text-xs px-2 py-1" onClick={deselectAllQuestions} disabled={noneSelected}>
-                None
-              </button>
-            </div>
+        {/* ── Card header — icon | title+subtitle | All/None buttons ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          {/* Icon */}
+          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+            </svg>
           </div>
 
-          {/* Tree */}
-          <div className="flex-1 overflow-y-auto max-h-96 border border-gray-100 rounded-xl bg-gray-50/50">
-            {topicTree.length === 0 ? (
-              <div className="p-6 text-center text-sm text-gray-400">No topics found</div>
-            ) : (
-              topicTree.map(node => (
-                <TopicTreeNode
-                  key={node.slug}
-                  node={node}
-                  selectedNums={selectedSet}
-                  onToggle={handleToggle}
-                />
-              ))
+          {/* Title + subtitle */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 className="font-bold text-gray-900" style={{ lineHeight: '1.2' }}>Select Topics</h3>
+            <p className="text-xs text-gray-500" style={{ marginTop: '0.125rem' }}>
+              <span className={`font-semibold ${canProceed ? 'text-[var(--primary)]' : 'text-red-500'}`}>
+                {selectedQuestionNumbers.length}
+              </span>
+              {' '}of {questions.length} questions selected
+            </p>
+          </div>
+
+          {/* All / None buttons */}
+          <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+            <button className="btn-ghost text-xs px-2 py-1" onClick={selectAllQuestions} disabled={allSelected}>
+              All
+            </button>
+            <button className="btn-ghost text-xs px-2 py-1" onClick={deselectAllQuestions} disabled={noneSelected}>
+              None
+            </button>
+          </div>
+        </div>
+
+        {/* ── Difficulty filter toggles ─────────────────────────────── */}
+        {availableDifficulties.length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-2)', marginBottom: '0.5rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Filter by Difficulty
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {availableDifficulties.map(diff => {
+                const meta = DIFF_META[diff];
+                const isActive = activeDiffs.has(diff);
+                const count = questions.filter(q => q.difficulty === diff).length;
+                return (
+                  <button
+                    key={diff}
+                    onClick={() => toggleDifficulty(diff)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.375rem',
+                      padding: '0.3125rem 0.75rem',
+                      borderRadius: '9999px',
+                      border: `1.5px solid ${isActive ? meta.activeBg : meta.border}`,
+                      background: isActive ? meta.activeBg : meta.bg,
+                      color: isActive ? meta.activeText : meta.text,
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      userSelect: 'none',
+                    }}
+                    title={`${isActive ? 'Hide' : 'Show'} ${diff} questions`}
+                  >
+                    {/* Checkmark when active */}
+                    {isActive ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    )}
+                    {diff}
+                    <span style={{
+                      fontSize: '0.6875rem',
+                      background: isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.08)',
+                      borderRadius: '9999px',
+                      padding: '0 0.375rem',
+                      lineHeight: '1.4',
+                    }}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {activeDiffs.size < availableDifficulties.length && (
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', marginTop: '0.375rem' }}>
+                ⚠ Some difficulty levels are hidden — those questions won&apos;t appear in the PDF.
+              </p>
             )}
           </div>
+        )}
 
-          {/* Live counter */}
-          <div className={`mt-3 text-sm font-medium text-center ${canProceed ? 'text-[var(--primary)]' : 'text-red-500'}`}>
-            {canProceed
-              ? `${selectedQuestionNumbers.length} question${selectedQuestionNumbers.length > 1 ? 's' : ''} selected`
-              : 'Select at least one question to continue'}
-          </div>
+        {/* ── Topic tree ────────────────────────────────────────────── */}
+        <div className="overflow-y-auto border border-gray-100 rounded-xl bg-gray-50/50" style={{ maxHeight: '28rem' }}>
+          {topicTree.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400">No topics found</div>
+          ) : (
+            topicTree.map(node => (
+              <TopicTreeNode
+                key={node.slug}
+                node={node}
+                selectedNums={selectedSet}
+                onToggle={handleToggle}
+              />
+            ))
+          )}
+        </div>
+
+        {/* ── Live counter ──────────────────────────────────────────── */}
+        <div className={`mt-3 text-sm font-medium text-center ${canProceed ? 'text-[var(--primary)]' : 'text-red-500'}`}>
+          {canProceed
+            ? `${selectedQuestionNumbers.length} question${selectedQuestionNumbers.length > 1 ? 's' : ''} selected`
+            : 'Select at least one question to continue'}
         </div>
       </div>
 
-      {/* ── Navigation ─────────────────────────────────────────────── */}
+      {/* ── Navigation ──────────────────────────────────────────────── */}
       <div className="flex justify-between pt-2">
         <button className="btn-ghost" onClick={() => setStep(1)}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

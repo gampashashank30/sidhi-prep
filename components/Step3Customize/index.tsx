@@ -2,8 +2,142 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
-import type { PDFSettings, AdImage } from '@/lib/types';
+import type { PDFSettings, AdImage, CoverSettings } from '@/lib/types';
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
+
+// ─── Cover Image Section (moved from Step 2) ──────────────────────────────────
+
+function CoverImageSection() {
+  const { coverSettings, setCoverSettings } = useWizardStore();
+  const [dragging, setDragging] = useState(false);
+  const [isDraggingFocal, setIsDraggingFocal] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // A4 aspect ratio: 210/297 ≈ 0.7071
+  const A4_RATIO = 210 / 297;
+  const PREVIEW_HEIGHT = 280; // px
+  const PREVIEW_WIDTH = Math.round(PREVIEW_HEIGHT * A4_RATIO);
+
+  const processFile = useCallback(async (file: File) => {
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        const blobUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 1600;
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { URL.revokeObjectURL(blobUrl); reject(new Error('canvas')); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(blobUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.9));
+        };
+        img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('load')); };
+        img.src = blobUrl;
+      });
+      setCoverSettings({ dataUrl, focalX: 0.5, focalY: 0.5 });
+    } catch (err) {
+      console.error('Cover image processing failed:', err);
+    }
+  }, [setCoverSettings]);
+
+  const handleFocalDrag = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingFocal || !previewRef.current || !coverSettings) return;
+    const rect = previewRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    setCoverSettings({ ...coverSettings, focalX: x, focalY: y });
+  }, [isDraggingFocal, coverSettings, setCoverSettings]);
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-900">Cover Image</h3>
+          <p className="text-xs text-gray-500">Optional — drag to reposition focal point</p>
+        </div>
+        {coverSettings && (
+          <button
+            className="btn-ghost text-xs px-2 py-1 ml-auto text-red-400 hover:text-red-600"
+            onClick={() => setCoverSettings(null)}
+            title="Remove cover image"
+          >
+            ✕ Remove
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-6 items-start flex-wrap">
+        {/* Upload dropzone */}
+        <div
+          className={`drop-zone flex-shrink-0 ${dragging ? 'active' : ''}`}
+          style={{ width: 160, height: 100, minHeight: 'unset', padding: '1rem' }}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); }}
+          onClick={() => document.getElementById('cover-upload-step3')?.click()}
+        >
+          <input id="cover-upload-step3" type="file" accept="image/jpeg,image/png" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ''; }} />
+          <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          <p className="text-xs text-gray-500">{coverSettings ? 'Replace image' : 'Upload JPG/PNG'}</p>
+        </div>
+
+        {/* Live preview with focal point control */}
+        {coverSettings && (
+          <div className="space-y-2">
+            <div
+              ref={previewRef}
+              className="relative rounded-xl overflow-hidden border-2 border-[var(--primary)]/30 cursor-crosshair select-none"
+              style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+              onMouseDown={() => setIsDraggingFocal(true)}
+              onMouseUp={() => setIsDraggingFocal(false)}
+              onMouseLeave={() => setIsDraggingFocal(false)}
+              onMouseMove={handleFocalDrag}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={coverSettings.dataUrl}
+                alt="Cover preview"
+                className="w-full h-full"
+                style={{
+                  objectFit: 'cover',
+                  objectPosition: `${Math.round(coverSettings.focalX * 100)}% ${Math.round(coverSettings.focalY * 100)}%`,
+                }}
+                draggable={false}
+              />
+              {/* Focal point crosshair */}
+              <div
+                className="absolute w-5 h-5 rounded-full border-2 border-white shadow-lg pointer-events-none"
+                style={{
+                  left: `calc(${coverSettings.focalX * 100}% - 10px)`,
+                  top: `calc(${coverSettings.focalY * 100}% - 10px)`,
+                  background: 'rgba(255,255,255,0.3)',
+                  backdropFilter: 'blur(2px)',
+                }}
+              />
+              <div className="absolute bottom-1 right-1 text-white text-xs bg-black/40 rounded px-1.5 py-0.5 backdrop-blur-sm">
+                A4 Preview
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 text-center">Click &amp; drag to set focal point</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Toggle Row ───────────────────────────────────────────────────────────────
 
@@ -90,9 +224,6 @@ function isValidUrl(url: string): boolean {
 }
 
 // ─── Live Preview Pane ────────────────────────────────────────────────────────
-// Runs 100% client-side: buildHTMLTemplate is pure string manipulation with
-// zero Node.js dependencies. We call it directly in the browser — no network
-// round-trip, no server cold-start. Preview is now instant on Render too.
 
 /** Fetch /logo.png once and convert to a base64 data URL */
 async function fetchLogoDataUrl(): Promise<string | null> {
@@ -117,7 +248,7 @@ function LivePreview({
   questions,
 }: {
   settings: PDFSettings;
-  coverSettings: import('@/lib/types').CoverSettings | null;
+  coverSettings: CoverSettings | null;
   questions: import('@/lib/types').Question[];
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -133,7 +264,6 @@ function LivePreview({
   }, []);
 
   // Rebuild preview synchronously on every change.
-  // No debounce needed — buildHTMLTemplate is <1ms (pure string template).
   useEffect(() => {
     if (!logoReady || questions.length === 0 || !iframeRef.current) return;
     const html = buildHTMLTemplate({
@@ -221,14 +351,14 @@ export default function Step3Customize() {
   const MAX_AD_IMAGES = 2;
   const handleAdUpload = useCallback(async (files: FileList) => {
     const remaining = MAX_AD_IMAGES - pdfSettings.adImages.length;
-    if (remaining <= 0) return; // already at limit
+    if (remaining <= 0) return;
 
     const compress = (file: File): Promise<string> =>
       new Promise((resolve, reject) => {
         const img = new Image();
         const blobUrl = URL.createObjectURL(file);
         img.onload = () => {
-          const MAX = 1400; // max dimension in px
+          const MAX = 1400;
           const scale = Math.min(1, MAX / Math.max(img.width, img.height));
           const w = Math.round(img.width * scale);
           const h = Math.round(img.height * scale);
@@ -245,7 +375,6 @@ export default function Step3Customize() {
       });
 
     const uploaded: AdImage[] = [];
-    // Only process files up to the remaining slots
     for (const file of Array.from(files).slice(0, remaining)) {
       try {
         const dataUrl = await compress(file);
@@ -314,16 +443,19 @@ export default function Step3Customize() {
       <div className="mb-6">
         <h2 className="section-heading">
           <span className="w-8 h-8 rounded-lg bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold">3</span>
-          Customise &amp; Export
+          Cover &amp; Export
         </h2>
         <p className="text-sm text-gray-500 mt-1 ml-10">
-          Configure your PDF appearance — preview updates instantly.
+          Add a cover image and configure your PDF appearance — preview updates instantly.
         </p>
       </div>
 
       <div className="grid-step3-layout">
         {/* ── Settings sidebar ─────────────────────────────────────── */}
         <div className="space-y-4">
+
+          {/* Cover image — first section in Step 3 */}
+          <CoverImageSection />
 
           {/* 5.7 Colors */}
           <SettingsSection title="Colors" icon={

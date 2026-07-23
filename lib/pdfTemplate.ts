@@ -353,7 +353,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
 
 // ─── Question block ───────────────────────────────────────────────────────────
 
-function renderQuestionBlock(q: Question, settings: PDFSettings): string {
+function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: number): string {
   const { primaryColor, accentColor } = settings;
   const maxOptLen = Math.max(...Object.values(q.options).map(o => o.length));
   const useHorizontal = maxOptLen <= 40;
@@ -388,7 +388,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
     ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${diffBadge}${topicBadge}</div>`
     : '';
 
-  // The explanation link — targets #exp-N which is in document flow
+  // The explanation link — targets #exp-N (original number) which is in document flow
   const expLink = `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`;
 
   return `<a id="q-${q.number}" name="q-${q.number}"></a>
@@ -401,7 +401,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings): string {
   ">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
       <div style="flex:1;min-width:0;">
-        <span style="font-weight:700;color:${primaryColor};font-size:8.5pt;">Q${q.number}. </span><span style="color:${NEUTRAL_TEXT};font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.text))}</span>
+        <span style="font-weight:700;color:${primaryColor};font-size:8.5pt;">Q${displayNumber}. </span><span style="color:${NEUTRAL_TEXT};font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.text))}</span>
       </div>
       ${answerBadge}
     </div>
@@ -445,7 +445,7 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
 
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
-function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string): string {
+function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
   return `<a id="exp-${q.number}" name="exp-${q.number}"></a>
   <div id="exp-${q.number}" style="
     break-inside:avoid;page-break-inside:avoid;
@@ -454,12 +454,12 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     background:#FAFBFC;
     position:relative;z-index:2;
   ">
-    <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${q.number} — Explanation</div>
+    <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${displayNumber} — Explanation</div>
     <div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>
     <div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
       <strong>Correct Answer:</strong> ${q.answer}) ${renderMath(stripMarkdown(q.options[q.answer]))}
     </div>
-    <a href="#q-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;">← Back to Question ${q.number}</a>
+    <a href="#q-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;">← Back to Question ${displayNumber}</a>
   </div>`;
 }
 
@@ -659,7 +659,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   if (previewMode) {
     const sampleQ = questions[previewQuestionIndex] ?? questions[0];
     const previewHtml = sampleQ
-      ? renderTopicHeading(sampleQ.subjectPath, primaryColor, new Set<string>()) + renderQuestionBlock(sampleQ, settings)
+      ? renderTopicHeading(sampleQ.subjectPath, primaryColor, new Set<string>()) + renderQuestionBlock(sampleQ, settings, 1)
       : '<p style="color:#888;font-size:9pt;padding:20px;">No question to preview.</p>';
 
     return wrapHtml({
@@ -689,13 +689,14 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi];
+    const displayNumber = qi + 1; // Sequential 1-based display number regardless of original q.number
     const topicKey = q.subjectPath.join('|||');
 
     if (topicKey !== prevTopicKey) {
       sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
       prevTopicKey = topicKey;
     }
-    sections.push(renderQuestionBlock(q, settings));
+    sections.push(renderQuestionBlock(q, settings, displayNumber));
 
     // Ad insertion: after every N questions, inject a full ad page.
     // (qi+1) is question count processed so far. We insert AFTER the Nth question
@@ -722,7 +723,8 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi];
-    sections.push(renderExplanationEntry(q, primaryColor, accentColor));
+    const displayNumber = qi + 1; // Sequential 1-based display number
+    sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
 
     // Same exact-count ad insertion in the explanations section
     if (
