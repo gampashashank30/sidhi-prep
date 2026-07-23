@@ -316,3 +316,22 @@ input[type="range"]::-webkit-slider-thumb {
 /* Responsive show/hide */
 @media (min-width: 640px)  { .sm\:block  { display: block; }  .sm\:flex { display: flex; } }
 @media (min-width: 1024px) { .lg\:block  { display: block; }  }
+
+/* ── Step 2 two-panel responsive grid ─────────────────────────────────────── */
+.step2-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .step2-layout { grid-template-columns: 300px 1fr; }
+}
+
+/* ── Line-clamp utility ───────────────────────────────────────────────────── */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
