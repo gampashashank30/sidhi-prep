@@ -374,7 +374,9 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
            </div>`).join('')}
        </div>`;
 
-  const answerBadge = `<span style="background:${primaryColor};color:white;padding:1px 7px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;flex-shrink:0;">Ans: ${q.answer}</span>`;
+  const answerBadge = settings.showAnswer
+    ? `<span style="background:${primaryColor};color:white;padding:1px 7px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;flex-shrink:0;">Ans: ${q.answer}</span>`
+    : '';
 
   const diffBadge = (settings.difficultyBadgeEnabled && q.difficulty)
     ? (() => { const c = DIFFICULTY_COLORS[q.difficulty]; return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;">${q.difficulty}</span>`; })()
@@ -388,8 +390,10 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${diffBadge}${topicBadge}</div>`
     : '';
 
-  // The explanation link — targets #exp-N (original number) which is in document flow
-  const expLink = `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`;
+  // The explanation link — only shown when explanations are included
+  const expLink = settings.includeExplanations
+    ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`
+    : '';
 
   return `<a id="q-${q.number}" name="q-${q.number}"></a>
   <div id="q-${q.number}" style="
@@ -715,32 +719,33 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
   sections.push(`</div>`); // close question section
 
-  // 4. Explanations section
-  sections.push(`<div style="break-before:page;page-break-before:always;">
-    <h2 style="font-size:13pt;font-weight:700;color:${primaryColor};margin:0 0 10px 0;padding-bottom:6px;border-bottom:2.5px solid ${primaryColor};position:relative;z-index:2;">
-      Explanations
-    </h2>`);
+  // 4. Explanations section — only rendered when settings.includeExplanations is true
+  if (settings.includeExplanations) {
+    sections.push(`<div style="break-before:page;page-break-before:always;">
+      <h2 style="font-size:13pt;font-weight:700;color:${primaryColor};margin:0 0 10px 0;padding-bottom:6px;border-bottom:2.5px solid ${primaryColor};position:relative;z-index:2;">
+        Explanations
+      </h2>`);
 
-  for (let qi = 0; qi < questions.length; qi++) {
-    const q = questions[qi];
-    const displayNumber = qi + 1; // Sequential 1-based display number
-    sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
+    for (let qi = 0; qi < questions.length; qi++) {
+      const q = questions[qi];
+      const displayNumber = qi + 1; // Sequential 1-based display number
+      sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
 
-    // Same exact-count ad insertion in the explanations section
-    if (
-      settings.adsEnabled &&
-      settings.adImages.length > 0 &&
-      (qi + 1) % settings.adIntervalQuestions === 0 &&
-      qi + 1 < questions.length
-    ) {
-      sections.push('</div>'); // close current explanation section cleanly
-      sections.push(renderAdPage(settings.adImages, layout));
-      sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
+      // Same exact-count ad insertion in the explanations section
+      if (
+        settings.adsEnabled &&
+        settings.adImages.length > 0 &&
+        (qi + 1) % settings.adIntervalQuestions === 0 &&
+        qi + 1 < questions.length
+      ) {
+        sections.push('</div>'); // close current explanation section cleanly
+        sections.push(renderAdPage(settings.adImages, layout));
+        sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
+      }
     }
+
+    sections.push(`</div>`);
   }
-
-  sections.push(`</div>`);
-
   return wrapHtml({
     body: sections.join('\n'),
     fixedElements: renderFixedElements(settings, logoDataUrl, layout),
