@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       questions: Question[];
       coverSettings: CoverSettings | null;
       settings: PDFSettings;
+      analyticsCharts?: { donut: boolean; pie: boolean; column: boolean };
     };
 
     const logoDataUrl = await getLogoDataUrl();
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
       coverSettings: body.coverSettings,
       logoDataUrl,
       settings: body.settings,
+      analyticsCharts: body.analyticsCharts,
     });
 
     // Use ArrayBuffer which is a valid BodyInit for NextResponse

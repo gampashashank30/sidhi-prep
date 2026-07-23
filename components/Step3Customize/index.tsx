@@ -703,8 +703,98 @@ export default function Step3Customize() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0119.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 004.5 10.5a7.464 7.464 0 01-1.15 3.993m1.989 3.559A11.209 11.209 0 008.25 10.5a3.75 3.75 0 117.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 01-3.6 9.75m6.633-4.596a18.666 18.666 0 01-2.485 5.33" />
             </svg>
           }>
-            <ToggleRow id="toggle-watermark" label="Background Logo Watermark" description="Centered, 7% opacity, behind all text" value={pdfSettings.watermarkEnabled} onChange={v => update('watermarkEnabled', v)} />
+            <ToggleRow id="toggle-watermark" label="Background Watermark" description="Centered, 7% opacity, prints behind all content" value={pdfSettings.watermarkEnabled} onChange={v => update('watermarkEnabled', v)} />
+            {pdfSettings.watermarkEnabled && (
+              <div className="mt-3 pl-4 border-l-2 border-gray-100 space-y-3">
+                {/* Default / Custom radio */}
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
+                    <input
+                      type="radio"
+                      name="watermark-mode"
+                      value="default"
+                      checked={!pdfSettings.watermarkDataUrl}
+                      onChange={() => update('watermarkDataUrl' as keyof PDFSettings, undefined as any)}
+                      className="accent-[var(--primary)]"
+                    />
+                    Default (app logo)
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
+                    <input
+                      type="radio"
+                      name="watermark-mode"
+                      value="custom"
+                      checked={!!pdfSettings.watermarkDataUrl}
+                      onChange={() => document.getElementById('wm-upload')?.click()}
+                      className="accent-[var(--primary)]"
+                    />
+                    Custom image
+                  </label>
+                </div>
+
+                {/* Dimension hint */}
+                <p className="text-xs text-gray-400 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+                  Best size: <strong>800 × 800 px</strong> square PNG/JPG, max 2 MB. Square images look most uniform as a watermark.
+                </p>
+
+                {/* Upload zone (shown whether default or custom, always available for switching) */}
+                <div>
+                  <input
+                    id="wm-upload"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) { alert('Watermark image must be under 2 MB.'); return; }
+                      const reader = new FileReader();
+                      reader.onloadend = () => update('watermarkDataUrl' as keyof PDFSettings, reader.result as any);
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  {pdfSettings.watermarkDataUrl ? (
+                    <div className="flex items-center gap-3 p-2 border border-gray-100 bg-gray-50 rounded-lg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={pdfSettings.watermarkDataUrl} alt="Custom watermark" className="w-14 h-14 object-contain rounded border border-gray-200 bg-white" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-700">Custom watermark set</p>
+                        <p className="text-xs text-gray-400">Replaces the default logo in the PDF background</p>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          className="btn-ghost text-xs px-2 py-1"
+                          onClick={() => document.getElementById('wm-upload')?.click()}
+                        >Change</button>
+                        <button
+                          className="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-600"
+                          onClick={() => update('watermarkDataUrl' as keyof PDFSettings, undefined as any)}
+                        >✕ Remove</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                      Upload Custom Watermark
+                      <input id="wm-upload-label" type="file" accept="image/png,image/jpeg" className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) { alert('Watermark image must be under 2 MB.'); return; }
+                          const reader = new FileReader();
+                          reader.onloadend = () => update('watermarkDataUrl' as keyof PDFSettings, reader.result as any);
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
           </SettingsSection>
+
 
           {/* 5.2 Border */}
           <SettingsSection title="Page Border" icon={

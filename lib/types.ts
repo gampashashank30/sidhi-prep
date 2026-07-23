@@ -43,6 +43,7 @@ export type BorderStyle = 'solid' | 'double' | 'dashed';
 export type PDFSettings = {
   // 5.1 Watermark
   watermarkEnabled: boolean;
+  watermarkDataUrl?: string;  // custom watermark image (base64). When undefined → uses default logo
 
   // 5.2 Border
   borderEnabled: boolean;

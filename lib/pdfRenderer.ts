@@ -94,6 +94,7 @@ async function launchBrowser() {
 
 export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const html = buildHTMLTemplate(opts);
+
   const browser = await launchBrowser();
   const page = await browser.newPage();
 

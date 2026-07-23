@@ -204,7 +204,7 @@ const SOCIAL_ICONS: Record<string, string> = {
   instagram: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><defs><radialGradient id="ig_rg" cx="30%" cy="110%" r="130%"><stop offset="0%" stop-color="#fdf497"/><stop offset="10%" stop-color="#fdf497"/><stop offset="40%" stop-color="#fd5949"/><stop offset="65%" stop-color="#d6249f"/><stop offset="100%" stop-color="#285AEB"/></radialGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="5.5" fill="url(#ig_rg)"/><circle cx="12" cy="12" r="4.8" fill="none" stroke="white" stroke-width="2"/><circle cx="17.6" cy="6.4" r="1.4" fill="white"/></svg>`,
   youtube:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect x="0" y="3" width="24" height="18" rx="4" fill="#FF0000"/><polygon points="9.5,8 9.5,16 17,12" fill="white"/></svg>`,
   telegram:  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><circle cx="12" cy="12" r="12" fill="#24A1DE"/><path fill="white" d="M5.4 11.5L18.4 6.5C18.9 6.3 19.3 6.7 19.1 7.2L16.2 19C16.1 19.5 15.5 19.7 15.1 19.4L11.5 16.5 9 18V14.5L17.5 7.5C17.7 7.3 17.4 7.1 17.2 7.3L7 13.5 4.1 12.6C3.6 12.4 3.6 11.7 4.1 11.5Z"/></svg>`,
-  playStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><path fill="#00C853" d="M3 23.5c.3.2.7.3 1.1.1L16.5 12 4.1.4C3.7.2 3.3.3 3 .5 2.7.8 2.5 1.2 2.5 1.6v20.8c0 .4.2.8.5 1.1z"/><path fill="#FF3D00" d="M14.2 10.2L17 7.8 5.4 1.3l8.8 8.9z"/><path fill="#FFC400" d="M17.8 13.1L21.5 12l-4.5-2.2-2.2 2.2 2.2 2.2 0.8-1.1z"/><path fill="#29B6F6" d="M5.4 22.7L17 16.2 14.2 13.8 5.4 22.7z"/></svg>`,
+  playStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><defs><linearGradient id="ps_a" x1="7.5" y1="12" x2="24" y2="12" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#00aeff"/><stop offset="1" stop-color="#0076ff"/></linearGradient><linearGradient id="ps_b" x1="1.5" y1="4.5" x2="13.24" y2="16.24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#00e979"/><stop offset="1" stop-color="#00c16e"/></linearGradient><linearGradient id="ps_c" x1="2.5" y1="14.5" x2="10.5" y2="22.5" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffcc00"/><stop offset="1" stop-color="#ff9800"/></linearGradient><linearGradient id="ps_d" x1="2" y1="2" x2="10" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff3a44"/><stop offset="1" stop-color="#b11162"/></linearGradient></defs><path d="M2.3 1.2C2 1.6 1.9 2.1 1.9 2.7v18.6c0 .6.1 1.1.4 1.5l.1.1 10.4-10.4v-.2L2.3 1.2z" fill="url(#ps_b)"/><path d="M16.3 15.9l-3.5-3.5V12l3.5-3.5.1.1 4.1 2.4c1.2.7 1.2 1.8 0 2.4l-4.2 2.5z" fill="url(#ps_a)"/><path d="M16.4 15.8L12.8 12 2.3 22.5c.4.4 1 .4 1.8 0l12.3-6.7" fill="url(#ps_c)"/><path d="M16.4 8.2L4.1 1.5C3.3 1.1 2.7 1.1 2.3 1.5L12.8 12l3.6-3.8z" fill="url(#ps_d)"/></svg>`,
   // Apple App Store — black apple silhouette on white rounded square
   appStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#000"/><path fill="white" d="M16.05 12.86c-.02-1.9 1.55-2.82 1.62-2.87-0.88-1.29-2.26-1.47-2.75-1.49-1.17-.12-2.29.69-2.88.69-.6 0-1.52-.67-2.5-.65-1.28.02-2.47.75-3.13 1.9-1.34 2.33-.34 5.77.96 7.66.64.92 1.4 1.96 2.4 1.92.96-.04 1.33-.62 2.49-.62 1.17 0 1.5.62 2.52.6 1.03-.02 1.68-.94 2.31-1.87.73-1.07 1.03-2.11 1.05-2.17-.02-.01-2.07-.8-2.09-3.1zm-1.96-5.7c.53-.65.89-1.55.79-2.45-.77.03-1.7.51-2.25 1.15-.49.57-.93 1.48-.81 2.36.86.07 1.73-.44 2.27-1.06z"/></svg>`,
   // Microsoft Store — four-colour Windows logo on white rounded square
@@ -343,10 +343,12 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   }
 
   // ── Watermark ───────────────────────────────────────────────────────────────
-  if (settings.watermarkEnabled && logoDataUrl) {
+  // Use custom watermark image when provided, otherwise fall back to app logo
+  const wmSrc = settings.watermarkDataUrl ?? logoDataUrl;
+  if (settings.watermarkEnabled && wmSrc) {
     const size = (Math.min(PAGE_WIDTH_MM, PAGE_HEIGHT_MM) * WATERMARK_SIZE_PERCENT) / 100;
     parts.push(`
-      <img class="running-watermark" src="${logoDataUrl}" style="
+      <img class="running-watermark" src="${wmSrc}" style="
         position:fixed;top:50%;left:50%;
         transform:translate(-50%,-50%);
         width:${size}mm;height:${size}mm;
@@ -355,6 +357,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
         -webkit-print-color-adjust:exact;print-color-adjust:exact;
       " />`);
   }
+
 
   return parts.join('\n');
 }
@@ -391,8 +394,9 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     : '';
 
   const topicBadge = (settings.topicBadgeEnabled && q.subjectPath.length > 0)
-    ? `<span style="background:${TOPIC_BADGE.bg};color:${TOPIC_BADGE.text};padding:1px 6px;border-radius:8px;font-size:7pt;font-weight:500;white-space:nowrap;max-width:100px;overflow:hidden;text-overflow:ellipsis;display:inline-block;">${escHtml(q.subjectPath[q.subjectPath.length - 1])}</span>`
+    ? `<span style="background:${TOPIC_BADGE.bg};color:${TOPIC_BADGE.text};padding:1px 7px;border-radius:8px;font-size:7pt;font-weight:500;white-space:nowrap;">${escHtml(q.subjectPath.join(' \u203a '))}</span>`
     : '';
+
 
   const badgeRow = (diffBadge || topicBadge)
     ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${diffBadge}${topicBadge}</div>`
@@ -497,25 +501,39 @@ function buildFlatTopicList(questions: Question[]): FlatEntry[] {
 function renderTOC(entries: FlatEntry[], primaryColor: string, accentColor: string): string {
   const rows = entries.map(({ path, slug, count, depth }) => {
     const label = path[path.length - 1];
-    return `<div style="
+    const isTop = depth === 0;
+    const paddingLeft = isTop ? 10 : 10 + depth * 14;
+    return `<a href="#topic-${slug}" style="
+      display:block;
+      text-decoration:none;
       break-inside:avoid;page-break-inside:avoid;
-      display:flex;align-items:center;gap:6px;
-      padding:4px ${depth * 14}px 4px ${depth * 14 + 4}px;
-      border-bottom:0.5px dotted #D1D5DB;
+      padding:${isTop ? 6 : 4}px 10px ${isTop ? 6 : 4}px ${paddingLeft}px;
+      border-bottom:0.5px solid ${isTop ? primaryColor + '25' : '#E5E7EB'};
+      background:${isTop ? primaryColor + '08' : 'transparent'};
     ">
-      <a href="#topic-${slug}" style="color:${primaryColor};text-decoration:none;font-size:8.5pt;flex:1;min-width:0;word-break:break-word;">${escHtml(label)}</a>
-      <span style="font-size:7pt;color:#9CA3AF;white-space:nowrap;">${count}Q</span>
-      <a href="#topic-${slug}" style="color:${accentColor};font-size:9pt;text-decoration:none;font-weight:700;flex-shrink:0;">→</a>
-    </div>`;
+      <div style="display:flex;align-items:center;gap:7px;">
+        ${isTop
+          ? `<span style="width:3px;height:16px;background:${primaryColor};border-radius:2px;flex-shrink:0;"></span>`
+          : `<span style="width:5px;height:5px;border-radius:50%;background:${accentColor};flex-shrink:0;margin-left:4px;opacity:0.7;"></span>`}
+        <span style="font-size:${isTop ? 9 : 8}pt;font-weight:${isTop ? 700 : 500};color:${isTop ? primaryColor : '#374151'};flex:1;line-height:1.4;">${escHtml(label)}</span>
+        <span style="font-size:7pt;font-weight:700;color:${isTop ? 'white' : '#6B7280'};background:${isTop ? primaryColor : '#F3F4F6'};padding:1px 6px;border-radius:9999px;white-space:nowrap;flex-shrink:0;">${count}Q</span>
+      </div>
+    </a>`;
   }).join('');
 
   return `
-    <h2 style="font-size:13pt;font-weight:700;color:${primaryColor};margin:0 0 10px 0;padding-bottom:6px;border-bottom:2.5px solid ${primaryColor};position:relative;z-index:2;">
-      Contents
-    </h2>
-    ${rows}
+    <div style="display:flex;align-items:center;gap:8pt;margin-bottom:14pt;padding-bottom:8pt;border-bottom:2.5px solid ${primaryColor};position:relative;z-index:2;">
+      <div style="width:24pt;height:24pt;border-radius:6pt;background:${primaryColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="15" y2="18"/></svg>
+      </div>
+      <h2 style="font-size:13pt;font-weight:700;color:${primaryColor};margin:0;line-height:1.2;">Contents</h2>
+    </div>
+    <div style="border:1px solid ${primaryColor}22;border-radius:6pt;overflow:hidden;position:relative;z-index:2;">
+      ${rows}
+    </div>
   `;
 }
+
 
 // ─── Cover page ───────────────────────────────────────────────────────────────
 
