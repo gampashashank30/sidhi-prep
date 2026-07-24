@@ -761,194 +761,147 @@ function renderAnalyticsPage(
   const slices = buildAnalyticsSlices(questions);
   const groups = buildSubjectGroups(questions);
   const total = questions.length;
-  const any = charts.donut || charts.pie || charts.column;
-  if (!any && slices.length === 0) return '';
+  if (slices.length === 0) return '';
 
-  // ── Horizontal Bar Chart (always shown — best for topic names) ────────────
+  // ── Auto-hide donut if too many subjects (looks cluttered with 8+ slices) ──
+  const tooManyTopics = slices.length > 8;
+  const showDonut = charts.donut && !tooManyTopics;
+
+  // ── Horizontal Bar Chart ───────────────────────────────────────────────────
+  // Uses viewBox + width="100%" so it scales to the container, never overflows.
   function buildHorizontalBarSvg(): string {
-    const BAR_H = 14; const GAP = 6; const PL = 0; const PR = 50; const PT = 4;
-    const W = 460;
-    const maxCount = Math.max(...slices.map(s => s.count));
-    const rows = slices.slice(0, 12); // cap at 12 rows to fit page
-    const totalH = PT + rows.length * (BAR_H + GAP);
-    const barMaxW = W - PR - PL;
+    // Coordinate system: 500 units wide (will scale to container via width="100%")
+    const VW = 500;
+    const LABEL_H = 11;   // height for text label above bar
+    const BAR_H  = 14;    // bar height
+    const GAP    = 10;    // gap between rows
+    const PR     = 62;    // right margin for the count+% label
+    const PT     = 2;     // top padding
+    const barMaxW = VW - PR;
 
-    let rowsSvg = '';
+    const rows = slices.slice(0, 14); // at most 14 subjects
+    const maxCount = Math.max(...rows.map(s => s.count), 1);
+    const ROW_H = LABEL_H + BAR_H + GAP;
+    const totalH = PT + rows.length * ROW_H;
+
+    let svg = '';
     rows.forEach((sl, i) => {
-      const y = PT + i * (BAR_H + GAP);
-      const bW = maxCount > 0 ? (sl.count / maxCount) * barMaxW : 0;
-      const lbl = sl.label.length > 30 ? sl.label.slice(0, 29) + '…' : sl.label;
-      // label above bar
-      rowsSvg += `<text x="${PL}" y="${y - 1}" font-size="7.5" font-weight="600" fill="#374151" font-family="Inter,sans-serif">${escHtml(lbl)}</text>`;
-      // background track
-      rowsSvg += `<rect x="${PL}" y="${y + 2}" width="${barMaxW}" height="${BAR_H - 2}" rx="3" fill="#F1F5F9"/>`;
-      // filled bar
-      if (bW > 0) {
-        rowsSvg += `<rect x="${PL}" y="${y + 2}" width="${bW}" height="${BAR_H - 2}" rx="3" fill="${sl.color}"/>`;
-      }
-      // count + pct label
-      rowsSvg += `<text x="${PL + barMaxW + 5}" y="${y + BAR_H - 2}" font-size="7.5" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count} (${sl.pct}%)</text>`;
+      const rowY = PT + i * ROW_H;
+      const bW   = (sl.count / maxCount) * barMaxW;
+      // Truncate label at 38 chars
+      const lbl  = sl.label.length > 38 ? sl.label.slice(0, 37) + '\u2026' : sl.label;
+
+      // Label text above bar
+      svg += `<text x="0" y="${rowY + LABEL_H - 2}" font-size="9" font-weight="600" fill="#374151" font-family="Inter,sans-serif">${escHtml(lbl)}</text>`;
+      // Background track
+      svg += `<rect x="0" y="${rowY + LABEL_H}" width="${barMaxW}" height="${BAR_H}" rx="4" fill="#EEF0F8" -webkit-print-color-adjust="exact"/>`;
+      // Filled bar (minimum 4px so 0-count subjects still show)
+      const fillW = Math.max(bW, sl.count > 0 ? 4 : 0);
+      svg += `<rect x="0" y="${rowY + LABEL_H}" width="${fillW}" height="${BAR_H}" rx="4" fill="${sl.color}" -webkit-print-color-adjust="exact"/>`;
+      // Count + % label to the right
+      svg += `<text x="${barMaxW + 5}" y="${rowY + LABEL_H + BAR_H / 2 + 1}" font-size="9" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif" dominant-baseline="middle">${sl.count} (${sl.pct}%)</text>`;
     });
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${totalH}" width="${W}" height="${totalH}">${rowsSvg}</svg>`;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${totalH}" width="100%" height="auto" preserveAspectRatio="xMinYMin meet" style="display:block;overflow:visible;">${svg}</svg>`;
   }
 
   // ── Donut SVG ─────────────────────────────────────────────────────────────
+  // Uses viewBox + width="100%" with explicit max-width container so it doesn't overflow.
   function buildDonutSvg(): string {
-    const SIZE = 180; const CX = 90; const CY = 90;
-    let paths = ''; let angle = -90;
+    const SIZE = 200; const CX = 100; const CY = 100;
+    const R_OUT = 88; const R_IN = 52;
+    let paths = '';
+    let angle = -90;
     for (const sl of slices) {
+      // Guard: skip slices with zero count
+      if (sl.count <= 0) continue;
       const sweep = (sl.count / total) * 360;
-      const d = buildSvgArcPath(CX, CY, 78, 44, angle, angle + sweep, 'donut');
-      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2"/>`;
+      const d = buildSvgArcPath(CX, CY, R_OUT, R_IN, angle, angle + sweep, 'donut');
+      // -webkit-print-color-adjust on path via inline style
+      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2.5" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
       angle += sweep;
     }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">
+    // Center text
+    const centerLabel = total.toString();
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:${SIZE}px;margin:0 auto;">
       ${paths}
-      <text x="${CX}" y="${CY - 7}" text-anchor="middle" dominant-baseline="auto" font-size="22" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${total}</text>
-      <text x="${CX}" y="${CY + 14}" text-anchor="middle" dominant-baseline="auto" font-size="9" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
+      <text x="${CX}" y="${CY - 8}" text-anchor="middle" dominant-baseline="auto" font-size="26" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${escHtml(centerLabel)}</text>
+      <text x="${CX}" y="${CY + 18}" text-anchor="middle" dominant-baseline="auto" font-size="11" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
     </svg>`;
   }
 
-  // ── Pie SVG ───────────────────────────────────────────────────────────────
-  function buildPieSvg(): string {
-    const SIZE = 180; const CX = 90; const CY = 90;
-    let paths = ''; let angle = -90;
-    for (const sl of slices) {
-      const sweep = (sl.count / total) * 360;
-      const d = buildSvgArcPath(CX, CY, 82, 0, angle, angle + sweep, 'pie');
-      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2"/>`;
-      angle += sweep;
-    }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">${paths}</svg>`;
-  }
-
-  // ── Column SVG ────────────────────────────────────────────────────────────
-  function buildColumnSvg(): string {
-    const rows = slices.slice(0, 10);
-    const W = 460; const H = 160; const PL = 30; const PT = 10; const PB = 55; const PR = 8;
-    const iW = W - PL - PR; const iH = H - PT - PB;
-    const maxC = Math.max(...rows.map((s) => s.count));
-    const barW = Math.max(14, Math.min(38, (iW / rows.length) * 0.65));
-    const gap = iW / rows.length;
-    let bars = '';
-    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
-      const y = PT + iH * (1 - p);
-      bars += `<line x1="${PL}" x2="${W - PR}" y1="${y}" y2="${y}" stroke="#E2E8F0" stroke-width="${p === 0 ? 1.5 : 1}" stroke-dasharray="${p === 0 ? '' : '3,3'}"/>`;
-      bars += `<text x="${PL - 4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="7.5" fill="#94A3B8" font-family="Inter,sans-serif">${Math.round(maxC * p)}</text>`;
-    }
-    rows.forEach((sl, i) => {
-      const bH = maxC > 0 ? (sl.count / maxC) * iH : 0;
-      const x = PL + gap * i + (gap - barW) / 2;
-      const y = PT + iH - bH;
-      // label — wrap at 8 chars if needed
-      const words = sl.label.split(' ');
-      let line1 = ''; let line2 = '';
-      for (const w of words) {
-        if ((line1 + w).length <= 9) line1 += (line1 ? ' ' : '') + w;
-        else { line2 += (line2 ? ' ' : '') + w; }
-      }
-      if (line2.length > 9) line2 = line2.slice(0, 8) + '…';
-
-      bars += `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="4" fill="${sl.color}"/>`;
-      bars += `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="7.5" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count}</text>`;
-      bars += `<text x="${x + barW / 2}" y="${PT + iH + 9}" text-anchor="middle" dominant-baseline="hanging" font-size="7" fill="#64748B" font-family="Inter,sans-serif">${escHtml(line1)}</text>`;
-      if (line2) bars += `<text x="${x + barW / 2}" y="${PT + iH + 18}" text-anchor="middle" dominant-baseline="hanging" font-size="7" fill="#64748B" font-family="Inter,sans-serif">${escHtml(line2)}</text>`;
-    });
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${bars}</svg>`;
-  }
-
   // ── Legend HTML ───────────────────────────────────────────────────────────
-  const legendCols = slices.length > 6 ? 3 : slices.length > 3 ? 2 : 1;
+  // 2-column max, word-wrap instead of ellipsis so long names don't get cut off
+  const legendCols = slices.length > 5 ? 2 : 1;
   const legendItems = slices.map((s) =>
-    `<div style="display:flex;align-items:center;gap:6pt;min-width:0;">
-      <span style="width:8pt;height:8pt;border-radius:2pt;background:${s.color};flex-shrink:0;"></span>
-      <span style="font-size:7.5pt;color:#475569;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${escHtml(s.label)}</span>
-      <span style="font-size:7.5pt;font-weight:700;color:#0F172A;flex-shrink:0;">${s.count}</span>
-      <span style="font-size:7pt;color:white;font-weight:600;background:${s.color};border-radius:9999pt;padding:1pt 4pt;flex-shrink:0;">${s.pct}%</span>
+    `<div style="display:flex;align-items:flex-start;gap:5pt;min-width:0;">
+      <span style="width:8pt;height:8pt;border-radius:2pt;background:${s.color};flex-shrink:0;margin-top:1pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>
+      <span style="font-size:7pt;color:#475569;flex:1;word-break:break-word;line-height:1.35;font-weight:500;">${escHtml(s.label)}</span>
+      <span style="font-size:7pt;font-weight:700;color:#0F172A;flex-shrink:0;white-space:nowrap;">${s.count}</span>
+      <span style="font-size:6.5pt;color:white;font-weight:600;background:${s.color};border-radius:9999pt;padding:1pt 4pt;flex-shrink:0;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${s.pct}%</span>
     </div>`
   ).join('');
 
   // ── Two-level subject breakdown table ─────────────────────────────────────
   function buildSubjectTable(): string {
-    let rows = '';
+    let tableRows = '';
     for (const g of groups) {
-      // Subject header row
-      rows += `
+      // Subject header row — light coloured background
+      tableRows += `
         <tr style="-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-          <td colspan="3" style="padding:5pt 6pt 4pt;background:${g.color}18;border-bottom:1px solid ${g.color}30;">
+          <td colspan="3" style="padding:5pt 8pt 4pt;background:${g.color}1C;border-bottom:1.5px solid ${g.color}35;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
             <div style="display:flex;align-items:center;gap:6pt;">
-              <span style="width:9pt;height:9pt;border-radius:2pt;background:${g.color};flex-shrink:0;display:inline-block;"></span>
-              <span style="font-size:8pt;font-weight:700;color:#0F172A;">${escHtml(g.label)}</span>
-              <span style="margin-left:auto;font-size:7pt;font-weight:700;color:white;background:${g.color};border-radius:9999pt;padding:1.5pt 5pt;">${g.count} (${g.pct}%)</span>
+              <span style="width:10pt;height:10pt;border-radius:3pt;background:${g.color};flex-shrink:0;display:inline-block;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>
+              <span style="font-size:8pt;font-weight:700;color:#0F172A;flex:1;">${escHtml(g.label)}</span>
+              <span style="font-size:7pt;font-weight:700;color:white;background:${g.color};border-radius:9999pt;padding:1.5pt 6pt;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${g.count} · ${g.pct}%</span>
             </div>
           </td>
         </tr>`;
-      // Subtopic rows
+      // Sub-topic rows
       for (const sub of g.subtopics) {
-        const barW = Math.round((sub.count / total) * 100);
-        rows += `
+        // bar width proportional to total questions (not to subject), so all bars are comparable
+        const barPct = total > 0 ? Math.max(1, Math.round((sub.count / total) * 100)) : 0;
+        tableRows += `
           <tr>
-            <td style="padding:3.5pt 6pt 3.5pt 18pt;font-size:7.5pt;color:#374151;border-bottom:1px solid #F1F5F9;width:45%;">${escHtml(sub.label)}</td>
-            <td style="padding:3.5pt 6pt;border-bottom:1px solid #F1F5F9;width:40%;">
-              <div style="display:flex;align-items:center;gap:5pt;">
-                <div style="flex:1;height:6pt;background:#F1F5F9;border-radius:3pt;overflow:hidden;">
-                  <div style="width:${barW}%;height:100%;background:${g.color};border-radius:3pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                </div>
+            <td style="padding:3pt 8pt 3pt 20pt;font-size:7.5pt;color:#374151;border-bottom:1px solid #F1F5F9;width:50%;word-break:break-word;">${escHtml(sub.label)}</td>
+            <td style="padding:3pt 6pt;border-bottom:1px solid #F1F5F9;width:35%;">
+              <div style="height:7pt;background:#F1F5F9;border-radius:3pt;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                <div style="width:${barPct}%;height:100%;background:${g.color};border-radius:3pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
               </div>
             </td>
-            <td style="padding:3.5pt 6pt;border-bottom:1px solid #F1F5F9;width:15%;text-align:right;">
+            <td style="padding:3pt 8pt;border-bottom:1px solid #F1F5F9;width:15%;text-align:right;white-space:nowrap;">
               <span style="font-size:7.5pt;font-weight:700;color:#0F172A;">${sub.count}</span>
-              <span style="font-size:6.5pt;color:#94A3B8;margin-left:3pt;">${sub.pct}%</span>
+              <span style="font-size:6.5pt;color:#94A3B8;margin-left:2pt;">${sub.pct}%</span>
             </td>
           </tr>`;
       }
     }
     return `
-      <table style="width:100%;border-collapse:collapse;border-radius:8pt;overflow:hidden;border:1px solid #E2E8F0;">
+      <table style="width:100%;border-collapse:collapse;overflow:hidden;border:1px solid #E2E8F0;">
         <thead>
           <tr style="background:#F8FAFC;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-            <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:left;border-bottom:1.5px solid #E2E8F0;">Subject / Topic</th>
+            <th style="padding:5pt 8pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:left;border-bottom:1.5px solid #E2E8F0;">Subject / Topic</th>
             <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:left;border-bottom:1.5px solid #E2E8F0;">Weightage</th>
-            <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:right;border-bottom:1.5px solid #E2E8F0;">Qs / %</th>
+            <th style="padding:5pt 8pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:right;border-bottom:1.5px solid #E2E8F0;">Qs / %</th>
           </tr>
         </thead>
-        <tbody>${rows}</tbody>
+        <tbody>${tableRows}</tbody>
       </table>`;
   }
 
-  // ── Chart blocks ──────────────────────────────────────────────────────────
-  let chartBlocks = '';
-
-  if (charts.donut) {
-    chartBlocks += `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04));border:1px solid rgba(99,102,241,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
-        <p style="font-size:7.5pt;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Donut Chart</p>
-        ${buildDonutSvg()}
-        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
-      </div>`;
-  }
-
-  if (charts.pie) {
-    chartBlocks += `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(20,184,154,0.05),rgba(6,182,212,0.04));border:1px solid rgba(20,184,154,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
-        <p style="font-size:7.5pt;font-weight:700;color:#14B89A;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Pie Chart</p>
-        ${buildPieSvg()}
-        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
-      </div>`;
-  }
-
-  if (charts.column) {
-    chartBlocks += `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:8pt;padding:14pt 16pt 12pt;background:linear-gradient(135deg,rgba(245,158,11,0.05),rgba(249,115,22,0.04));border:1px solid rgba(245,158,11,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
-        <p style="font-size:7.5pt;font-weight:700;color:#D97706;text-transform:uppercase;letter-spacing:0.06em;margin:0;">Column Chart</p>
-        ${buildColumnSvg()}
-        <div style="display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:4pt 12pt;width:100%;">${legendItems}</div>
-      </div>`;
-  }
-
-  const chartsGridCols = charts.donut && charts.pie && !charts.column ? '1fr 1fr'
-    : charts.donut && charts.pie && charts.column ? '1fr 1fr'
-    : '1fr';
+  // ── Donut block (only when ≤ 8 subjects) ─────────────────────────────────
+  const donutBlock = showDonut ? `
+    <div style="margin-bottom:14pt;padding:12pt 14pt;background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04));border:1px solid rgba(99,102,241,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;overflow:hidden;">
+      <p style="font-size:7.5pt;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 8pt 0;">Donut Chart</p>
+      <div style="display:flex;align-items:center;gap:16pt;flex-wrap:wrap;">
+        <div style="flex-shrink:0;width:140pt;max-width:140pt;">
+          ${buildDonutSvg()}
+        </div>
+        <div style="flex:1;min-width:120pt;display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:5pt 10pt;">
+          ${legendItems}
+        </div>
+      </div>
+    </div>` : '';
 
   return `
     <div style="break-before:page;page-break-before:always;position:relative;z-index:2;">
@@ -967,23 +920,20 @@ function renderAnalyticsPage(
         </div>
       </div>
 
-      <!-- Topic Weightage Bar Chart (always shown) -->
-      <div style="margin-bottom:14pt;padding:12pt 14pt;background:#FAFBFF;border:1px solid #E8EDFB;border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
+      <!-- Subject Weightage — horizontal bar, scales to container width via viewBox+100% -->
+      <div style="margin-bottom:14pt;padding:12pt 14pt;background:#FAFBFF;border:1px solid #E8EDFB;border-radius:10pt;break-inside:avoid;page-break-inside:avoid;overflow:hidden;">
         <p style="font-size:8pt;font-weight:700;color:#475569;margin:0 0 10pt 0;text-transform:uppercase;letter-spacing:0.06em;">Subject Weightage</p>
         ${buildHorizontalBarSvg()}
       </div>
 
-      <!-- Subject Breakdown Table -->
-      <div style="margin-bottom:14pt;break-inside:avoid;page-break-inside:avoid;">
+      <!-- Donut Chart (auto-hidden when > 8 subjects) -->
+      ${donutBlock}
+
+      <!-- Detailed Breakdown by Topic -->
+      <div style="break-inside:avoid;page-break-inside:avoid;">
         <p style="font-size:8pt;font-weight:700;color:#475569;margin:0 0 6pt 0;text-transform:uppercase;letter-spacing:0.06em;">Detailed Breakdown by Topic</p>
         ${buildSubjectTable()}
       </div>
-
-      ${any ? `
-      <!-- Chart blocks grid -->
-      <div style="display:grid;grid-template-columns:${chartsGridCols};gap:14pt;">
-        ${chartBlocks}
-      </div>` : ''}
 
     </div>`;
 }
