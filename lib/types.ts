@@ -44,6 +44,7 @@ export type PDFSettings = {
   // 5.1 Watermark
   watermarkEnabled: boolean;
   watermarkDataUrl?: string;  // custom watermark image (base64). When undefined → uses default logo
+  watermarkOpacity?: number;  // 0.01–0.30, default 0.07
 
   // 5.2 Border
   borderEnabled: boolean;

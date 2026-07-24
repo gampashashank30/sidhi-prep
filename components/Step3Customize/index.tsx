@@ -791,6 +791,27 @@ export default function Step3Customize() {
                     </label>
                   )}
                 </div>
+
+                {/* Opacity slider */}
+                <div>
+                  <label className="form-label" htmlFor="watermark-opacity">
+                    Opacity: <strong>{Math.round((pdfSettings.watermarkOpacity ?? 0.07) * 100)}%</strong>
+                  </label>
+                  <input
+                    id="watermark-opacity"
+                    type="range"
+                    min={1}
+                    max={30}
+                    step={1}
+                    value={Math.round((pdfSettings.watermarkOpacity ?? 0.07) * 100)}
+                    style={{ ['--pct' as string]: `${(((pdfSettings.watermarkOpacity ?? 0.07) * 100 - 1) / (30 - 1)) * 100}%` }}
+                    onChange={e => update('watermarkOpacity' as keyof PDFSettings, parseFloat(e.target.value) / 100 as any)}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="text-xs text-gray-400">Subtle (1%)</span>
+                    <span className="text-xs text-gray-400">Strong (30%)</span>
+                  </div>
+                </div>
               </div>
             )}
           </SettingsSection>

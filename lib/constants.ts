@@ -34,6 +34,7 @@ export const WATERMARK_SIZE_PERCENT = 60; // % of shorter page dimension
 // ─── Default PDF settings ─────────────────────────────────────────────────────
 export const DEFAULT_PDF_SETTINGS = {
   watermarkEnabled: true,
+  watermarkOpacity: WATERMARK_OPACITY,
   borderEnabled: true,
   borderColor: DEFAULT_PRIMARY,
   borderStyle: 'solid' as const,

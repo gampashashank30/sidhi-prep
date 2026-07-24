@@ -352,7 +352,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
         position:fixed;top:50%;left:50%;
         transform:translate(-50%,-50%);
         width:${size}mm;height:${size}mm;
-        object-fit:contain;opacity:${WATERMARK_OPACITY};
+        object-fit:contain;opacity:${settings.watermarkOpacity ?? WATERMARK_OPACITY};
         pointer-events:none;z-index:1;
         -webkit-print-color-adjust:exact;print-color-adjust:exact;
       " />`);

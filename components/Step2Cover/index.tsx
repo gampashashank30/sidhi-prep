@@ -48,13 +48,13 @@ function TriCheckbox({ state, onChange }: { state: CheckState; onChange: () => v
 // ─── Topic Tree Node ──────────────────────────────────────────────────────────
 
 function TopicTreeNode({
-  node, selectedNums, onToggle, onFocus, focusedPath, depth = 0,
+  node, selectedNums, onToggle, onFocusToggle, focusedPaths, depth = 0,
 }: {
   node: TopicNode;
   selectedNums: Set<number>;
   onToggle: (numbers: number[]) => void;
-  onFocus: (path: string[] | null) => void;
-  focusedPath: string[] | null;
+  onFocusToggle: (pathKey: string) => void;
+  focusedPaths: Set<string>;
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
@@ -70,13 +70,15 @@ function TopicTreeNode({
     selectedCount === 0 ? 'unchecked' :
     selectedCount === allNums.length ? 'checked' : 'indeterminate';
 
-  // Is this node or an ancestor of the focused path?
-  const isFocused = focusedPath !== null &&
-    focusedPath.length >= node.fullPath.length &&
-    node.fullPath.every((seg, i) => focusedPath[i] === seg);
-  // Is this node exactly the focused path?
-  const isExactFocus = focusedPath !== null &&
-    focusedPath.length === node.fullPath.length && isFocused;
+  const nodeKey = node.fullPath.join('|||');
+  // Exact focus: this node's key is in the set
+  const isExactFocus = focusedPaths.has(nodeKey);
+  // Ancestor highlight: any focused path starts with this node's path
+  const isFocused = isExactFocus || Array.from(focusedPaths).some(k => {
+    const parts = k.split('|||');
+    return parts.length > node.fullPath.length &&
+      node.fullPath.every((seg, i) => parts[i] === seg);
+  });
 
   const handleCheck = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -86,7 +88,7 @@ function TopicTreeNode({
 
   const handleFocus = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onFocus(isExactFocus ? null : node.fullPath);
+    onFocusToggle(nodeKey);
   };
 
   return (
@@ -98,8 +100,9 @@ function TopicTreeNode({
           paddingLeft: `${depth * 14 + 6}px`, paddingRight: '6px',
           paddingTop: '5px', paddingBottom: '5px',
           borderRadius: '0.375rem', cursor: 'pointer',
-          background: isExactFocus ? 'rgba(27,94,167,0.1)' : isFocused ? 'rgba(27,94,167,0.04)' : 'transparent',
+          background: isExactFocus ? 'rgba(27,94,167,0.12)' : isFocused ? 'rgba(27,94,167,0.04)' : 'transparent',
           transition: 'background 0.1s',
+          outline: isExactFocus ? '1.5px solid rgba(27,94,167,0.25)' : 'none',
         }}
         className="hover:bg-[rgba(27,94,167,0.06)]"
       >
@@ -160,8 +163,8 @@ function TopicTreeNode({
               node={child}
               selectedNums={selectedNums}
               onToggle={onToggle}
-              onFocus={onFocus}
-              focusedPath={focusedPath}
+              onFocusToggle={onFocusToggle}
+              focusedPaths={focusedPaths}
               depth={depth + 1}
             />
           ))}
@@ -311,7 +314,7 @@ export default function Step2Cover() {
     [questions]
   );
 
-  // ── Difficulty filter ─────────────────────────────────────────────────────
+  // ── Difficulty filter (selection side-effect) ─────────────────────────
   const availableDifficulties = useMemo((): Difficulty[] => {
     const found = new Set(questions.map(q => q.difficulty as Difficulty));
     const order: Difficulty[] = ['Very Easy', 'Easy', 'Medium', 'Hard'];
@@ -340,8 +343,38 @@ export default function Step2Cover() {
     });
   }, [questions, selectedQuestionNumbers, setSelectedQuestions]);
 
-  // ── Topic focus (filters right panel) ───────────────────────────────────
-  const [focusedPath, setFocusedPath] = useState<string[] | null>(null);
+  // ── Difficulty VIEW filter (only controls what is visible in right panel) ─
+  const [viewDiffs, setViewDiffs] = useState<Set<Difficulty>>(() => new Set(availableDifficulties));
+  React.useEffect(() => {
+    setViewDiffs(new Set(availableDifficulties));
+  }, [availableDifficulties]);
+
+  const toggleViewDiff = useCallback((diff: Difficulty) => {
+    setViewDiffs(prev => {
+      const next = new Set(prev);
+      if (next.has(diff)) {
+        // Don't allow deselecting the last one — keep at least one active
+        if (next.size > 1) next.delete(diff);
+      } else {
+        next.add(diff);
+      }
+      return next;
+    });
+  }, []);
+
+  // ── Multi-topic focus (Set of path keys, filters right panel) ────────────
+  const [focusedPaths, setFocusedPaths] = useState<Set<string>>(() => new Set());
+
+  const toggleFocusedPath = useCallback((pathKey: string) => {
+    setFocusedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(pathKey)) next.delete(pathKey);
+      else next.add(pathKey);
+      return next;
+    });
+  }, []);
+
+  const clearFocusedPaths = useCallback(() => setFocusedPaths(new Set()), []);
 
   // ── Search ───────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -363,12 +396,24 @@ export default function Step2Cover() {
   // ── Filtered questions for right panel ──────────────────────────────────
   const displayedQuestions = useMemo(() => {
     let qs = questions;
-    if (focusedPath) {
+
+    // Multi-topic filter: show questions matching ANY of the selected topics
+    if (focusedPaths.size > 0) {
+      const pathsArray = Array.from(focusedPaths).map(k => k.split('|||'));
       qs = qs.filter(q =>
-        q.subjectPath.length >= focusedPath.length &&
-        focusedPath.every((seg, i) => q.subjectPath[i] === seg)
+        pathsArray.some(path =>
+          q.subjectPath.length >= path.length &&
+          path.every((seg, i) => q.subjectPath[i] === seg)
+        )
       );
     }
+
+    // Difficulty view filter: only show questions from active view difficulties
+    if (viewDiffs.size > 0 && viewDiffs.size < availableDifficulties.length) {
+      qs = qs.filter(q => viewDiffs.has(q.difficulty as Difficulty));
+    }
+
+    // Text search
     if (searchQuery.trim()) {
       const lower = searchQuery.toLowerCase();
       qs = qs.filter(q =>
@@ -377,8 +422,9 @@ export default function Step2Cover() {
         String(q.number).includes(lower)
       );
     }
+
     return qs;
-  }, [questions, focusedPath, searchQuery]);
+  }, [questions, focusedPaths, viewDiffs, availableDifficulties.length, searchQuery]);
 
   const selectedInView = displayedQuestions.filter(q => selectedSet.has(q.number)).length;
   const allInViewSelected = displayedQuestions.length > 0 && selectedInView === displayedQuestions.length;
@@ -395,7 +441,7 @@ export default function Step2Cover() {
 
   const allSelected = selectedQuestionNumbers.length === questions.length;
   const noneSelected = selectedQuestionNumbers.length === 0;
-  const hasFilter = !!focusedPath || !!searchQuery.trim();
+  const hasFilter = focusedPaths.size > 0 || !!searchQuery.trim() || viewDiffs.size < availableDifficulties.length;
 
   return (
     <div style={{ maxWidth: '88rem', margin: '0 auto' }} className="animate-slide-up">
@@ -475,11 +521,12 @@ export default function Step2Cover() {
             {/* Difficulty section */}
             {availableDifficulties.length > 0 && (
               <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                {/* Selection toggles (affect which questions go into PDF) */}
                 <p style={{
                   fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-2)',
                   marginBottom: '0.5rem', letterSpacing: '0.08em', textTransform: 'uppercase',
                 }}>
-                  Filter by Difficulty
+                  Select by Difficulty
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3125rem' }}>
                   {availableDifficulties.map(diff => {
@@ -532,6 +579,44 @@ export default function Step2Cover() {
                     <span>⚠</span> Some difficulties excluded from PDF
                   </p>
                 )}
+
+                {/* View filter — controls what's VISIBLE in the right panel */}
+                <p style={{
+                  fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-2)',
+                  margin: '0.75rem 0 0.375rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}>
+                  Show in List
+                </p>
+                <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                  {availableDifficulties.map(diff => {
+                    const meta = DIFF_META[diff];
+                    const isViewing = viewDiffs.has(diff);
+                    return (
+                      <button
+                        key={`view-${diff}`}
+                        onClick={() => toggleViewDiff(diff)}
+                        title={isViewing ? `Hide ${diff} questions from list` : `Show ${diff} questions in list`}
+                        style={{
+                          padding: '0.25rem 0.625rem',
+                          borderRadius: '9999px',
+                          border: `1.5px solid ${isViewing ? meta.activeBg : meta.border}`,
+                          background: isViewing ? meta.pillBg : '#F8FAFC',
+                          color: isViewing ? meta.pillText : '#94A3B8',
+                          fontSize: '0.6875rem', fontWeight: 700,
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          opacity: isViewing ? 1 : 0.6,
+                        }}
+                      >
+                        {diff}
+                      </button>
+                    );
+                  })}
+                </div>
+                {viewDiffs.size < availableDifficulties.length && (
+                  <p style={{ fontSize: '0.6875rem', color: '#6366F1', marginTop: '0.25rem' }}>
+                    Showing {viewDiffs.size} of {availableDifficulties.length} difficulties
+                  </p>
+                )}
               </div>
             )}
 
@@ -539,17 +624,22 @@ export default function Step2Cover() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-2)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  Topics
+                  Topics {focusedPaths.size > 0 && <span style={{ color: 'var(--primary)', fontWeight: 700 }}>({focusedPaths.size} active)</span>}
                 </p>
-                {focusedPath && (
+                {focusedPaths.size > 0 && (
                   <button
-                    onClick={() => setFocusedPath(null)}
+                    onClick={clearFocusedPaths}
                     style={{ fontSize: '0.6875rem', color: 'var(--primary)', fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '2px' }}
                   >
-                    Show all <span style={{ fontSize: '0.8125rem' }}>×</span>
+                    Clear <span style={{ fontSize: '0.8125rem' }}>×</span>
                   </button>
                 )}
               </div>
+              {focusedPaths.size === 0 && (
+                <p style={{ fontSize: '0.6875rem', color: '#94A3B8', marginBottom: '0.375rem' }}>
+                  Click a topic to filter the list. Click multiple to combine.
+                </p>
+              )}
               <div style={{ overflowY: 'auto', maxHeight: '56vh' }}>
                 {topicTree.length === 0 ? (
                   <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-3)', padding: '2rem 0' }}>No topics found</p>
@@ -560,8 +650,8 @@ export default function Step2Cover() {
                       node={node}
                       selectedNums={selectedSet}
                       onToggle={handleTopicToggle}
-                      onFocus={setFocusedPath}
-                      focusedPath={focusedPath}
+                      onFocusToggle={toggleFocusedPath}
+                      focusedPaths={focusedPaths}
                     />
                   ))
                 )}
@@ -600,8 +690,8 @@ export default function Step2Cover() {
               )}
             </div>
 
-            {/* Active topic filter chip */}
-            {focusedPath && (
+            {/* Active topic filter chip — shows count when multiple selected */}
+            {focusedPaths.size > 0 && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '0.25rem',
                 background: 'rgba(27,94,167,0.08)', border: '1px solid rgba(27,94,167,0.2)',
@@ -611,8 +701,11 @@ export default function Step2Cover() {
                 <svg style={{ width: '0.75rem', height: '0.75rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
-                {focusedPath[focusedPath.length - 1]}
-                <button onClick={() => setFocusedPath(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--primary)', padding: '0 0 0 2px', lineHeight: 1, fontSize: '0.9rem' }}>×</button>
+                {focusedPaths.size === 1
+                  ? Array.from(focusedPaths)[0].split('|||').slice(-1)[0]
+                  : `${focusedPaths.size} topics`
+                }
+                <button onClick={clearFocusedPaths} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--primary)', padding: '0 0 0 2px', lineHeight: 1, fontSize: '0.9rem' }}>×</button>
               </div>
             )}
 
@@ -647,7 +740,7 @@ export default function Step2Cover() {
                 <p style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.375rem' }}>No questions match your filters</p>
                 {hasFilter && (
                   <button
-                    onClick={() => { setSearchQuery(''); setFocusedPath(null); }}
+                    onClick={() => { setSearchQuery(''); clearFocusedPaths(); setViewDiffs(new Set(availableDifficulties)); }}
                     style={{ fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Clear all filters
