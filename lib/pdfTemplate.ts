@@ -1082,8 +1082,11 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
         position: relative;
         background: white;
         width: ${PAGE_WIDTH_MM}mm;
+        ${previewMode ? `height: ${PAGE_HEIGHT_MM}mm; overflow: hidden;` : ''}
         box-shadow: ${previewMode ? 'none' : '0 8px 32px rgba(0,0,0,0.25)'};
       }
+      /* In preview, the border box must fill the full page height, not just content height */
+      ${previewMode ? `.running-border { height: ${PAGE_HEIGHT_MM}mm !important; top: 0 !important; }` : ''}
       .running-header, .running-footer, .running-border, .running-watermark {
         position: absolute !important;
       }
