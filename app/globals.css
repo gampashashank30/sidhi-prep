@@ -268,7 +268,7 @@ input[type="range"]::-webkit-slider-thumb {
 @media (min-width: 1024px) { .grid-lg-2 { grid-template-columns: 1fr 1fr; } }
 
 .grid-step3-layout { display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
-@media (min-width: 1024px) { .grid-step3-layout { grid-template-columns: 1fr 420px; } }
+@media (min-width: 1024px) { .grid-step3-layout { grid-template-columns: 1fr 500px; } }
 
 /* ── Scroll utilities ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; }

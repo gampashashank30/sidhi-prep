@@ -462,6 +462,11 @@ function LivePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const logoRef = useRef<string | null>(null);
   const [logoReady, setLogoReady] = useState(false);
+  const [pageIdx, setPageIdx] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  // Clamp pageIdx when questions change
+  const safeIdx = questions.length === 0 ? 0 : Math.min(pageIdx, questions.length - 1);
 
   // Fetch logo once on mount and cache it
   useEffect(() => {
@@ -471,69 +476,178 @@ function LivePreview({
     });
   }, []);
 
-  // Rebuild preview synchronously on every change.
+  // Rebuild preview on every change with fade transition
   useEffect(() => {
     if (!logoReady || questions.length === 0 || !iframeRef.current) return;
-    const html = buildHTMLTemplate({
-      questions: [questions[0]],
-      coverSettings,
-      logoDataUrl: logoRef.current,
-      settings,
-      previewMode: true,
-      previewQuestionIndex: 0,
-    });
-    iframeRef.current.srcdoc = html;
-  }, [settings, questions, coverSettings, logoReady]);
+    setFading(true);
+    const t = setTimeout(() => {
+      const html = buildHTMLTemplate({
+        questions: [questions[safeIdx]],
+        coverSettings,
+        logoDataUrl: logoRef.current,
+        settings,
+        previewMode: true,
+        previewQuestionIndex: 0,
+      });
+      if (iframeRef.current) iframeRef.current.srcdoc = html;
+      setFading(false);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [settings, questions, coverSettings, logoReady, safeIdx]);
 
-  // A4 aspect ratio
-  const A4_RATIO = 297 / 210;
-  const PREVIEW_W = 380;
-  const PREVIEW_H = Math.round(PREVIEW_W * A4_RATIO);
-  const SCALE = PREVIEW_W / (210 * 3.7795); // mm → px at 96dpi
+  const goPage = (dir: 1 | -1) => {
+    const next = Math.max(0, Math.min(questions.length - 1, safeIdx + dir));
+    setPageIdx(next);
+  };
+
+  // A4 at 96 dpi = 793.7 px wide. We want to fill a ~480px column.
+  const PREVIEW_W = 460;
+  const A4_W_PX = 210 * 3.7795;  // 793.7 px
+  const A4_H_PX = 297 * 3.7795;  // 1122.5 px
+  const SCALE = PREVIEW_W / A4_W_PX;
+  const PREVIEW_H = Math.round(A4_H_PX * SCALE);
 
   return (
-    <div className="sticky top-20 space-y-2">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="section-heading text-base">
-          <svg className="w-4 h-4 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          Live Preview
-        </h3>
-        {!logoReady && (
-          <span className="text-xs text-[var(--primary)] flex items-center gap-1">
-            <span className="w-3 h-3 rounded-full border-2 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin" />
+    <div className="sticky top-20">
+      {/* ── Header bar ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        borderRadius: '1rem 1rem 0 0',
+        padding: '0.75rem 1rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '0.5rem',
+      }}>
+        {/* Left: icon + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '1.75rem', height: '1.75rem', borderRadius: '0.5rem',
+            background: 'rgba(99,179,237,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg style={{ width: '0.875rem', height: '0.875rem', color: '#63B3ED' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <div>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F1F5F9', lineHeight: 1 }}>Live Preview</p>
+            <p style={{ fontSize: '0.625rem', color: '#64748B', marginTop: '1px' }}>Updates instantly</p>
+          </div>
+        </div>
+
+        {/* Right: loading indicator or page nav */}
+        {!logoReady ? (
+          <span style={{ fontSize: '0.6875rem', color: '#63B3ED', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <span style={{ width: '0.75rem', height: '0.75rem', borderRadius: '50%', border: '2px solid rgba(99,179,237,0.3)', borderTopColor: '#63B3ED', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
             Loading…
+          </span>
+        ) : questions.length > 1 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <button
+              onClick={() => goPage(-1)}
+              disabled={safeIdx === 0}
+              style={{
+                width: '1.5rem', height: '1.5rem', borderRadius: '0.375rem', border: 'none',
+                background: safeIdx === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(99,179,237,0.15)',
+                color: safeIdx === 0 ? '#475569' : '#63B3ED',
+                cursor: safeIdx === 0 ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg style={{ width: '0.625rem', height: '0.625rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Q{safeIdx + 1} / {questions.length}
+            </span>
+            <button
+              onClick={() => goPage(1)}
+              disabled={safeIdx === questions.length - 1}
+              style={{
+                width: '1.5rem', height: '1.5rem', borderRadius: '0.375rem', border: 'none',
+                background: safeIdx === questions.length - 1 ? 'rgba(255,255,255,0.05)' : 'rgba(99,179,237,0.15)',
+                color: safeIdx === questions.length - 1 ? '#475569' : '#63B3ED',
+                cursor: safeIdx === questions.length - 1 ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg style={{ width: '0.625rem', height: '0.625rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>
+            {questions.length} Q{questions.length !== 1 ? 's' : ''} selected
           </span>
         )}
       </div>
 
-      <div
-        className="preview-pane overflow-hidden shadow-xl rounded-2xl"
-        style={{ width: PREVIEW_W, height: PREVIEW_H + 32 }}
-      >
+      {/* ── Document window ── */}
+      <div style={{
+        background: '#1a2234',
+        borderRadius: '0 0 1rem 1rem',
+        padding: '1.25rem 1rem 1rem',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+      }}>
         {questions.length === 0 ? (
-          <div className="p-4 text-xs text-gray-400 text-center">Select questions to preview</div>
+          <div style={{
+            height: PREVIEW_H,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: '0.75rem', color: '#475569',
+          }}>
+            <svg style={{ width: '2.5rem', height: '2.5rem', opacity: 0.4 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+            <p style={{ fontSize: '0.8125rem', fontWeight: 500 }}>Select questions in Step 2 to preview</p>
+          </div>
         ) : (
-          <div className="relative w-full h-full bg-white overflow-hidden">
+          /* The A4 page with drop shadow */
+          <div style={{
+            width: PREVIEW_W,
+            height: PREVIEW_H,
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: '4px',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.4)',
+            opacity: fading ? 0.4 : 1,
+            transition: 'opacity 0.12s ease',
+          }}>
             <iframe
               ref={iframeRef}
               title="PDF Preview"
               sandbox="allow-same-origin"
-              className="absolute top-0 left-0 border-0"
               style={{
-                width: '210mm',
-                height: '297mm',
+                position: 'absolute', top: 0, left: 0, border: 0,
+                width: `${A4_W_PX}px`,
+                height: `${A4_H_PX}px`,
                 transformOrigin: 'top left',
                 transform: `scale(${SCALE})`,
                 pointerEvents: 'none',
+                background: '#fff',
               }}
             />
           </div>
         )}
+
+        {/* Footer hint */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.75rem' }}>
+          <span style={{
+            fontSize: '0.625rem', color: '#334155', fontWeight: 500,
+            background: 'rgba(255,255,255,0.05)', borderRadius: '9999px',
+            padding: '0.25rem 0.75rem',
+            display: 'flex', alignItems: 'center', gap: '0.375rem',
+          }}>
+            <svg style={{ width: '0.625rem', height: '0.625rem', color: '#475569' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+            </svg>
+            Sample of one question per page
+          </span>
+        </div>
       </div>
-      <p className="text-xs text-gray-400 text-center">One sample page · Updates instantly</p>
     </div>
   );
 }
