@@ -680,8 +680,17 @@ export interface TemplateOptions {
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
 
-function buildAnalyticsSlices(questions: Question[]): Array<{ label: string; count: number; pct: number; color: string }> {
-  const COLORS = ['#6366F1','#14B89A','#F59E0B','#EF4444','#10B981','#8B5CF6','#3B82F6','#EC4899','#F97316','#06B6D4'];
+const CHART_COLORS = ['#6366F1','#14B89A','#F59E0B','#EF4444','#10B981','#8B5CF6','#3B82F6','#EC4899','#F97316','#06B6D4'];
+
+interface AnalyticsSlice { label: string; count: number; pct: number; color: string; }
+
+interface SubjectGroup {
+  label: string; color: string; count: number; pct: number;
+  subtopics: Array<{ label: string; count: number; pct: number }>;
+}
+
+/** Build top-level subject slices */
+function buildAnalyticsSlices(questions: Question[]): AnalyticsSlice[] {
   const map = new Map<string, number>();
   for (const q of questions) {
     const key = q.subjectPath[0] ?? 'Uncategorised';
@@ -693,8 +702,41 @@ function buildAnalyticsSlices(questions: Question[]): Array<{ label: string; cou
     .map(([label, count], i) => ({
       label, count,
       pct: total > 0 ? Math.round((count / total) * 100) : 0,
-      color: COLORS[i % COLORS.length],
+      color: CHART_COLORS[i % CHART_COLORS.length],
     }));
+}
+
+/** Build two-level grouped structure: subject → subtopics */
+function buildSubjectGroups(questions: Question[]): SubjectGroup[] {
+  const total = questions.length;
+  // Map: subject → Map<subtopic, count>
+  const outer = new Map<string, Map<string, number>>();
+  for (const q of questions) {
+    const subject = q.subjectPath[0] ?? 'Uncategorised';
+    const subtopic = q.subjectPath[1] ?? q.subjectPath[0] ?? 'General';
+    if (!outer.has(subject)) outer.set(subject, new Map());
+    const inner = outer.get(subject)!;
+    inner.set(subtopic, (inner.get(subtopic) ?? 0) + 1);
+  }
+  return Array.from(outer.entries())
+    .sort((a, b) => {
+      const sumA = Array.from(a[1].values()).reduce((s, v) => s + v, 0);
+      const sumB = Array.from(b[1].values()).reduce((s, v) => s + v, 0);
+      return sumB - sumA;
+    })
+    .map(([subject, subtopicMap], i) => {
+      const count = Array.from(subtopicMap.values()).reduce((s, v) => s + v, 0);
+      const subtopics = Array.from(subtopicMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, cnt]) => ({ label, count: cnt, pct: Math.round((cnt / total) * 100) }));
+      return {
+        label: subject,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        count,
+        pct: Math.round((count / total) * 100),
+        subtopics,
+      };
+    });
 }
 
 function buildSvgArcPath(cx: number, cy: number, rOut: number, rIn: number, startDeg: number, endDeg: number, type: 'donut' | 'pie'): string {
@@ -717,11 +759,40 @@ function renderAnalyticsPage(
 ): string {
   if (questions.length === 0) return '';
   const slices = buildAnalyticsSlices(questions);
+  const groups = buildSubjectGroups(questions);
   const total = questions.length;
   const any = charts.donut || charts.pie || charts.column;
-  if (!any) return '';
+  if (!any && slices.length === 0) return '';
 
-  // ── Donut SVG (static) ──────────────────────────────────────────────────────
+  // ── Horizontal Bar Chart (always shown — best for topic names) ────────────
+  function buildHorizontalBarSvg(): string {
+    const BAR_H = 14; const GAP = 6; const PL = 0; const PR = 50; const PT = 4;
+    const W = 460;
+    const maxCount = Math.max(...slices.map(s => s.count));
+    const rows = slices.slice(0, 12); // cap at 12 rows to fit page
+    const totalH = PT + rows.length * (BAR_H + GAP);
+    const barMaxW = W - PR - PL;
+
+    let rowsSvg = '';
+    rows.forEach((sl, i) => {
+      const y = PT + i * (BAR_H + GAP);
+      const bW = maxCount > 0 ? (sl.count / maxCount) * barMaxW : 0;
+      const lbl = sl.label.length > 30 ? sl.label.slice(0, 29) + '…' : sl.label;
+      // label above bar
+      rowsSvg += `<text x="${PL}" y="${y - 1}" font-size="7.5" font-weight="600" fill="#374151" font-family="Inter,sans-serif">${escHtml(lbl)}</text>`;
+      // background track
+      rowsSvg += `<rect x="${PL}" y="${y + 2}" width="${barMaxW}" height="${BAR_H - 2}" rx="3" fill="#F1F5F9"/>`;
+      // filled bar
+      if (bW > 0) {
+        rowsSvg += `<rect x="${PL}" y="${y + 2}" width="${bW}" height="${BAR_H - 2}" rx="3" fill="${sl.color}"/>`;
+      }
+      // count + pct label
+      rowsSvg += `<text x="${PL + barMaxW + 5}" y="${y + BAR_H - 2}" font-size="7.5" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count} (${sl.pct}%)</text>`;
+    });
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${totalH}" width="${W}" height="${totalH}">${rowsSvg}</svg>`;
+  }
+
+  // ── Donut SVG ─────────────────────────────────────────────────────────────
   function buildDonutSvg(): string {
     const SIZE = 180; const CX = 90; const CY = 90;
     let paths = ''; let angle = -90;
@@ -738,7 +809,7 @@ function renderAnalyticsPage(
     </svg>`;
   }
 
-  // ── Pie SVG (static) ────────────────────────────────────────────────────────
+  // ── Pie SVG ───────────────────────────────────────────────────────────────
   function buildPieSvg(): string {
     const SIZE = 180; const CX = 90; const CY = 90;
     let paths = ''; let angle = -90;
@@ -751,34 +822,43 @@ function renderAnalyticsPage(
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">${paths}</svg>`;
   }
 
-  // ── Column SVG (static) ─────────────────────────────────────────────────────
+  // ── Column SVG ────────────────────────────────────────────────────────────
   function buildColumnSvg(): string {
-    const W = 380; const H = 150; const PL = 30; const PT = 10; const PB = 50; const PR = 8;
+    const rows = slices.slice(0, 10);
+    const W = 460; const H = 160; const PL = 30; const PT = 10; const PB = 55; const PR = 8;
     const iW = W - PL - PR; const iH = H - PT - PB;
-    const maxC = Math.max(...slices.map((s) => s.count));
-    const barW = Math.max(14, Math.min(42, (iW / slices.length) * 0.6));
-    const gap = iW / slices.length;
+    const maxC = Math.max(...rows.map((s) => s.count));
+    const barW = Math.max(14, Math.min(38, (iW / rows.length) * 0.65));
+    const gap = iW / rows.length;
     let bars = '';
-    // Gridlines
     for (const p of [0, 0.25, 0.5, 0.75, 1]) {
       const y = PT + iH * (1 - p);
-      bars += `<line x1="${PL}" x2="${W - PR}" y1="${y}" y2="${y}" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="${p === 0 ? '' : '3,3'}"/>`;
-      bars += `<text x="${PL - 4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="#94A3B8" font-family="Inter,sans-serif">${Math.round(maxC * p)}</text>`;
+      bars += `<line x1="${PL}" x2="${W - PR}" y1="${y}" y2="${y}" stroke="#E2E8F0" stroke-width="${p === 0 ? 1.5 : 1}" stroke-dasharray="${p === 0 ? '' : '3,3'}"/>`;
+      bars += `<text x="${PL - 4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="7.5" fill="#94A3B8" font-family="Inter,sans-serif">${Math.round(maxC * p)}</text>`;
     }
-    for (let i = 0; i < slices.length; i++) {
-      const sl = slices[i];
+    rows.forEach((sl, i) => {
       const bH = maxC > 0 ? (sl.count / maxC) * iH : 0;
       const x = PL + gap * i + (gap - barW) / 2;
       const y = PT + iH - bH;
-      const lbl = sl.label.length > 10 ? sl.label.slice(0, 9) + '\u2026' : sl.label;
+      // label — wrap at 8 chars if needed
+      const words = sl.label.split(' ');
+      let line1 = ''; let line2 = '';
+      for (const w of words) {
+        if ((line1 + w).length <= 9) line1 += (line1 ? ' ' : '') + w;
+        else { line2 += (line2 ? ' ' : '') + w; }
+      }
+      if (line2.length > 9) line2 = line2.slice(0, 8) + '…';
+
       bars += `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="4" fill="${sl.color}"/>`;
-      bars += `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="8" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count}</text>`;
-      bars += `<text x="${x + barW / 2}" y="${PT + iH + 9}" text-anchor="middle" dominant-baseline="hanging" font-size="8" fill="#64748B" font-family="Inter,sans-serif">${lbl}</text>`;
-    }
+      bars += `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="7.5" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif">${sl.count}</text>`;
+      bars += `<text x="${x + barW / 2}" y="${PT + iH + 9}" text-anchor="middle" dominant-baseline="hanging" font-size="7" fill="#64748B" font-family="Inter,sans-serif">${escHtml(line1)}</text>`;
+      if (line2) bars += `<text x="${x + barW / 2}" y="${PT + iH + 18}" text-anchor="middle" dominant-baseline="hanging" font-size="7" fill="#64748B" font-family="Inter,sans-serif">${escHtml(line2)}</text>`;
+    });
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${bars}</svg>`;
   }
 
-  // ── Legend HTML ─────────────────────────────────────────────────────────────
+  // ── Legend HTML ───────────────────────────────────────────────────────────
+  const legendCols = slices.length > 6 ? 3 : slices.length > 3 ? 2 : 1;
   const legendItems = slices.map((s) =>
     `<div style="display:flex;align-items:center;gap:6pt;min-width:0;">
       <span style="width:8pt;height:8pt;border-radius:2pt;background:${s.color};flex-shrink:0;"></span>
@@ -788,9 +868,55 @@ function renderAnalyticsPage(
     </div>`
   ).join('');
 
-  const legendCols = slices.length > 6 ? 3 : slices.length > 3 ? 2 : 1;
+  // ── Two-level subject breakdown table ─────────────────────────────────────
+  function buildSubjectTable(): string {
+    let rows = '';
+    for (const g of groups) {
+      // Subject header row
+      rows += `
+        <tr style="-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+          <td colspan="3" style="padding:5pt 6pt 4pt;background:${g.color}18;border-bottom:1px solid ${g.color}30;">
+            <div style="display:flex;align-items:center;gap:6pt;">
+              <span style="width:9pt;height:9pt;border-radius:2pt;background:${g.color};flex-shrink:0;display:inline-block;"></span>
+              <span style="font-size:8pt;font-weight:700;color:#0F172A;">${escHtml(g.label)}</span>
+              <span style="margin-left:auto;font-size:7pt;font-weight:700;color:white;background:${g.color};border-radius:9999pt;padding:1.5pt 5pt;">${g.count} (${g.pct}%)</span>
+            </div>
+          </td>
+        </tr>`;
+      // Subtopic rows
+      for (const sub of g.subtopics) {
+        const barW = Math.round((sub.count / total) * 100);
+        rows += `
+          <tr>
+            <td style="padding:3.5pt 6pt 3.5pt 18pt;font-size:7.5pt;color:#374151;border-bottom:1px solid #F1F5F9;width:45%;">${escHtml(sub.label)}</td>
+            <td style="padding:3.5pt 6pt;border-bottom:1px solid #F1F5F9;width:40%;">
+              <div style="display:flex;align-items:center;gap:5pt;">
+                <div style="flex:1;height:6pt;background:#F1F5F9;border-radius:3pt;overflow:hidden;">
+                  <div style="width:${barW}%;height:100%;background:${g.color};border-radius:3pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                </div>
+              </div>
+            </td>
+            <td style="padding:3.5pt 6pt;border-bottom:1px solid #F1F5F9;width:15%;text-align:right;">
+              <span style="font-size:7.5pt;font-weight:700;color:#0F172A;">${sub.count}</span>
+              <span style="font-size:6.5pt;color:#94A3B8;margin-left:3pt;">${sub.pct}%</span>
+            </td>
+          </tr>`;
+      }
+    }
+    return `
+      <table style="width:100%;border-collapse:collapse;border-radius:8pt;overflow:hidden;border:1px solid #E2E8F0;">
+        <thead>
+          <tr style="background:#F8FAFC;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+            <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:left;border-bottom:1.5px solid #E2E8F0;">Subject / Topic</th>
+            <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:left;border-bottom:1.5px solid #E2E8F0;">Weightage</th>
+            <th style="padding:5pt 6pt;font-size:7.5pt;font-weight:700;color:#475569;text-align:right;border-bottom:1.5px solid #E2E8F0;">Qs / %</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
 
-  // ── Chart blocks HTML ────────────────────────────────────────────────────────
+  // ── Chart blocks ──────────────────────────────────────────────────────────
   let chartBlocks = '';
 
   if (charts.donut) {
@@ -820,40 +946,48 @@ function renderAnalyticsPage(
       </div>`;
   }
 
+  const chartsGridCols = charts.donut && charts.pie && !charts.column ? '1fr 1fr'
+    : charts.donut && charts.pie && charts.column ? '1fr 1fr'
+    : '1fr';
+
   return `
     <div style="break-before:page;page-break-before:always;position:relative;z-index:2;">
+
       <!-- Analytics Page Header -->
-      <div style="display:flex;align-items:center;gap:8pt;margin-bottom:16pt;padding-bottom:8pt;border-bottom:2.5px solid ${escHtml(primaryColor)};">
-        <div style="width:28pt;height:28pt;border-radius:8pt;background:linear-gradient(135deg,#6366F1,#8B5CF6);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8pt;margin-bottom:14pt;padding-bottom:8pt;border-bottom:2.5px solid ${escHtml(primaryColor)};">
+        <div style="width:28pt;height:28pt;border-radius:8pt;background:linear-gradient(135deg,#6366F1,#8B5CF6);display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
             <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
             <line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
           </svg>
         </div>
         <div>
-          <h2 style="font-size:13pt;font-weight:700;color:${escHtml(primaryColor)};margin:0;line-height:1.2;">Topic Analytics</h2>
-          <p style="font-size:8pt;color:#64748B;margin:2pt 0 0 0;">Question distribution by subject — ${total} questions across ${slices.length} subject${slices.length !== 1 ? 's' : ''}</p>
+          <h2 style="font-size:13pt;font-weight:700;color:${escHtml(primaryColor)};margin:0;line-height:1.2;">Topic Analytics &amp; Weightage</h2>
+          <p style="font-size:8pt;color:#64748B;margin:2pt 0 0 0;">${total} questions across ${slices.length} subject${slices.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
 
-      <!-- Summary stat pills -->
-      <div style="display:flex;gap:8pt;flex-wrap:wrap;margin-bottom:16pt;">
-        ${slices.slice(0, 5).map((s) =>
-          `<div style="display:inline-flex;align-items:center;gap:5pt;padding:4pt 9pt;border-radius:9999pt;background:${s.color}1A;border:1.2px solid ${s.color}40;">
-            <span style="width:7pt;height:7pt;border-radius:50%;background:${s.color};"></span>
-            <span style="font-size:7.5pt;font-weight:600;color:#0F172A;">${escHtml(s.label)}</span>
-            <span style="font-size:7.5pt;font-weight:700;color:${s.color};">${s.count}</span>
-          </div>`
-        ).join('')}
-        ${slices.length > 5 ? `<div style="display:inline-flex;align-items:center;padding:4pt 9pt;border-radius:9999pt;background:#F1F5F9;border:1.2px solid #E2E8F0;"><span style="font-size:7.5pt;font-weight:600;color:#64748B;">+${slices.length - 5} more</span></div>` : ''}
+      <!-- Topic Weightage Bar Chart (always shown) -->
+      <div style="margin-bottom:14pt;padding:12pt 14pt;background:#FAFBFF;border:1px solid #E8EDFB;border-radius:10pt;break-inside:avoid;page-break-inside:avoid;">
+        <p style="font-size:8pt;font-weight:700;color:#475569;margin:0 0 10pt 0;text-transform:uppercase;letter-spacing:0.06em;">Subject Weightage</p>
+        ${buildHorizontalBarSvg()}
       </div>
 
-      <!-- Chart blocks grid -->
-      <div style="display:grid;grid-template-columns:${charts.donut && charts.pie && !charts.column ? '1fr 1fr' : charts.donut && charts.pie && charts.column ? '1fr 1fr' : '1fr'};gap:14pt;">
-        ${chartBlocks}
+      <!-- Subject Breakdown Table -->
+      <div style="margin-bottom:14pt;break-inside:avoid;page-break-inside:avoid;">
+        <p style="font-size:8pt;font-weight:700;color:#475569;margin:0 0 6pt 0;text-transform:uppercase;letter-spacing:0.06em;">Detailed Breakdown by Topic</p>
+        ${buildSubjectTable()}
       </div>
+
+      ${any ? `
+      <!-- Chart blocks grid -->
+      <div style="display:grid;grid-template-columns:${chartsGridCols};gap:14pt;">
+        ${chartBlocks}
+      </div>` : ''}
+
     </div>`;
 }
+
 
 
 
