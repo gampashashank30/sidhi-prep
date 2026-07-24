@@ -343,25 +343,6 @@ export default function Step2Cover() {
     });
   }, [questions, selectedQuestionNumbers, setSelectedQuestions]);
 
-  // ── Difficulty VIEW filter (only controls what is visible in right panel) ─
-  const [viewDiffs, setViewDiffs] = useState<Set<Difficulty>>(() => new Set(availableDifficulties));
-  React.useEffect(() => {
-    setViewDiffs(new Set(availableDifficulties));
-  }, [availableDifficulties]);
-
-  const toggleViewDiff = useCallback((diff: Difficulty) => {
-    setViewDiffs(prev => {
-      const next = new Set(prev);
-      if (next.has(diff)) {
-        // Don't allow deselecting the last one — keep at least one active
-        if (next.size > 1) next.delete(diff);
-      } else {
-        next.add(diff);
-      }
-      return next;
-    });
-  }, []);
-
   // ── Multi-topic focus (Set of path keys, filters right panel) ────────────
   const [focusedPaths, setFocusedPaths] = useState<Set<string>>(() => new Set());
 
@@ -408,9 +389,9 @@ export default function Step2Cover() {
       );
     }
 
-    // Difficulty view filter: only show questions from active view difficulties
-    if (viewDiffs.size > 0 && viewDiffs.size < availableDifficulties.length) {
-      qs = qs.filter(q => viewDiffs.has(q.difficulty as Difficulty));
+    // Difficulty filter: only show questions from active difficulties
+    if (activeDiffs.size > 0 && activeDiffs.size < availableDifficulties.length) {
+      qs = qs.filter(q => activeDiffs.has(q.difficulty as Difficulty));
     }
 
     // Text search
@@ -424,7 +405,7 @@ export default function Step2Cover() {
     }
 
     return qs;
-  }, [questions, focusedPaths, viewDiffs, availableDifficulties.length, searchQuery]);
+  }, [questions, focusedPaths, activeDiffs, availableDifficulties.length, searchQuery]);
 
   const selectedInView = displayedQuestions.filter(q => selectedSet.has(q.number)).length;
   const allInViewSelected = displayedQuestions.length > 0 && selectedInView === displayedQuestions.length;
@@ -441,7 +422,7 @@ export default function Step2Cover() {
 
   const allSelected = selectedQuestionNumbers.length === questions.length;
   const noneSelected = selectedQuestionNumbers.length === 0;
-  const hasFilter = focusedPaths.size > 0 || !!searchQuery.trim() || viewDiffs.size < availableDifficulties.length;
+  const hasFilter = focusedPaths.size > 0 || !!searchQuery.trim() || activeDiffs.size < availableDifficulties.length;
 
   return (
     <div style={{ maxWidth: '88rem', margin: '0 auto' }} className="animate-slide-up">
@@ -579,44 +560,6 @@ export default function Step2Cover() {
                     <span>⚠</span> Some difficulties excluded from PDF
                   </p>
                 )}
-
-                {/* View filter — controls what's VISIBLE in the right panel */}
-                <p style={{
-                  fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-2)',
-                  margin: '0.75rem 0 0.375rem', letterSpacing: '0.08em', textTransform: 'uppercase',
-                }}>
-                  Show in List
-                </p>
-                <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-                  {availableDifficulties.map(diff => {
-                    const meta = DIFF_META[diff];
-                    const isViewing = viewDiffs.has(diff);
-                    return (
-                      <button
-                        key={`view-${diff}`}
-                        onClick={() => toggleViewDiff(diff)}
-                        title={isViewing ? `Hide ${diff} questions from list` : `Show ${diff} questions in list`}
-                        style={{
-                          padding: '0.25rem 0.625rem',
-                          borderRadius: '9999px',
-                          border: `1.5px solid ${isViewing ? meta.activeBg : meta.border}`,
-                          background: isViewing ? meta.pillBg : '#F8FAFC',
-                          color: isViewing ? meta.pillText : '#94A3B8',
-                          fontSize: '0.6875rem', fontWeight: 700,
-                          cursor: 'pointer', transition: 'all 0.15s',
-                          opacity: isViewing ? 1 : 0.6,
-                        }}
-                      >
-                        {diff}
-                      </button>
-                    );
-                  })}
-                </div>
-                {viewDiffs.size < availableDifficulties.length && (
-                  <p style={{ fontSize: '0.6875rem', color: '#6366F1', marginTop: '0.25rem' }}>
-                    Showing {viewDiffs.size} of {availableDifficulties.length} difficulties
-                  </p>
-                )}
               </div>
             )}
 
@@ -740,7 +683,7 @@ export default function Step2Cover() {
                 <p style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.375rem' }}>No questions match your filters</p>
                 {hasFilter && (
                   <button
-                    onClick={() => { setSearchQuery(''); clearFocusedPaths(); setViewDiffs(new Set(availableDifficulties)); }}
+                    onClick={() => { setSearchQuery(''); clearFocusedPaths(); setActiveDiffs(new Set(availableDifficulties)); }}
                     style={{ fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Clear all filters
