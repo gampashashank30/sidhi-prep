@@ -680,17 +680,15 @@ export interface TemplateOptions {
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
 
-const CHART_COLORS = ['#6366F1','#14B89A','#F59E0B','#EF4444','#10B981','#8B5CF6','#3B82F6','#EC4899','#F97316','#06B6D4'];
+const PALETTE_32 = [
+  '#6366F1','#EC4899','#14B8A6','#F59E0B','#8B5CF6','#22C55E','#EF4444','#06B6D4',
+  '#F97316','#3B82F6','#A855F7','#84CC16','#F43F5E','#10B981','#FBBF24','#0EA5E9',
+  '#D946EF','#4ADE80','#FB923C','#38BDF8','#818CF8','#E879F9','#2DD4BF','#FDE047',
+  '#F87171','#34D399','#60A5FA','#C084FC','#FB7185','#A3E635','#67E8F9','#FCD34D',
+];
+// Keep a 10-color fallback for backwards compat (horizontal bar etc.)
+const CHART_COLORS = PALETTE_32.slice(0, 10);
 
-/** Lighten a hex color towards white — used for outer subtopic ring tints */
-function lightenHex(hex: string, amount: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff; const g = (n >> 8) & 0xff; const b = n & 0xff;
-  const lr = Math.round(r + (255 - r) * amount);
-  const lg = Math.round(g + (255 - g) * amount);
-  const lb = Math.round(b + (255 - b) * amount);
-  return `#${lr.toString(16).padStart(2,'0')}${lg.toString(16).padStart(2,'0')}${lb.toString(16).padStart(2,'0')}`;
-}
 
 interface AnalyticsSlice { label: string; count: number; pct: number; color: string; }
 
@@ -699,7 +697,7 @@ interface SubjectGroup {
   subtopics: Array<{ label: string; count: number; pct: number }>;
 }
 
-/** Build top-level subject slices */
+/** Build top-level subject slices — subjects use stride-4 colors from PALETTE_32 */
 function buildAnalyticsSlices(questions: Question[]): AnalyticsSlice[] {
   const map = new Map<string, number>();
   for (const q of questions) {
@@ -712,17 +710,16 @@ function buildAnalyticsSlices(questions: Question[]): AnalyticsSlice[] {
     .map(([label, count], i) => ({
       label, count,
       pct: total > 0 ? Math.round((count / total) * 100) : 0,
-      color: CHART_COLORS[i % CHART_COLORS.length],
+      color: PALETTE_32[(i * 4) % PALETTE_32.length],   // stride-4 for max contrast
     }));
 }
 
 /** Build two-level grouped structure: subject → subtopics */
 function buildSubjectGroups(questions: Question[]): SubjectGroup[] {
   const total = questions.length;
-  // Map: subject → Map<subtopic, count>
   const outer = new Map<string, Map<string, number>>();
   for (const q of questions) {
-    const subject = q.subjectPath[0] ?? 'Uncategorised';
+    const subject  = q.subjectPath[0] ?? 'Uncategorised';
     const subtopic = q.subjectPath[1] ?? q.subjectPath[0] ?? 'General';
     if (!outer.has(subject)) outer.set(subject, new Map());
     const inner = outer.get(subject)!;
@@ -741,7 +738,7 @@ function buildSubjectGroups(questions: Question[]): SubjectGroup[] {
         .map(([label, cnt]) => ({ label, count: cnt, pct: Math.round((cnt / total) * 100) }));
       return {
         label: subject,
-        color: CHART_COLORS[i % CHART_COLORS.length],
+        color: PALETTE_32[(i * 4) % PALETTE_32.length],  // stride-4 matches buildAnalyticsSlices
         count,
         pct: Math.round((count / total) * 100),
         subtopics,
@@ -843,13 +840,19 @@ function renderAnalyticsPage(
       angle += sweep;
     }
 
-    // ── Outer ring: subtopics ────────────────────────────────────────────────
+    // ── Outer ring: subtopics — each gets its own unique PALETTE_32 color ────
     angle = -90;
+    let subtopicGlobalIdx = 0; // sequential across ALL subjects
     for (const g of groups) {
       for (let ti = 0; ti < g.subtopics.length; ti++) {
         const sub = g.subtopics[ti];
         if (sub.count <= 0) continue;
-        const tint  = lightenHex(g.color, 0.15 + ti * 0.1);
+        // Unique color per subtopic — globally sequential, skip parent-subject color
+        let colorIdx = subtopicGlobalIdx % PALETTE_32.length;
+        if (PALETTE_32[colorIdx] === g.color) colorIdx = (colorIdx + 1) % PALETTE_32.length;
+        const topicColor = PALETTE_32[colorIdx];
+        subtopicGlobalIdx++;
+
         const sweep = Math.min((sub.count / total) * 360, 359.999);
         const large = sweep > 180 ? 1 : 0;
         const toXY  = (r: number, deg: number) => ({
@@ -859,38 +862,69 @@ function renderAnalyticsPage(
         const s  = toXY(R_OUT_OUT, angle);  const e  = toXY(R_OUT_OUT, angle + sweep);
         const si = toXY(R_OUT_IN,  angle);  const ei = toXY(R_OUT_IN,  angle + sweep);
         const d  = `M ${s.x} ${s.y} A ${R_OUT_OUT} ${R_OUT_OUT} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${R_OUT_IN} ${R_OUT_IN} 0 ${large} 0 ${si.x} ${si.y} Z`;
-        outerPaths += `<path d="${d}" fill="${tint}" stroke="white" stroke-width="1.5" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
+        outerPaths += `<path d="${d}" fill="${topicColor}" stroke="white" stroke-width="1.5" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
         angle += sweep;
       }
     }
 
-    // ── Subject legend (compact, one row per subject) ────────────────────────
-    const legendRows = groups.map(g =>
+    // ── Legends: Subjects (inner) + All Topics (outer) ───────────────────────
+    const subjectRows = groups.map(g =>
       `<tr>
-        <td style="padding:2pt 6pt 2pt 0;vertical-align:middle;">
+        <td style="padding:1.5pt 5pt 1.5pt 0;vertical-align:middle;">
           <div style="width:8pt;height:8pt;border-radius:2pt;background:${g.color};-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
         </td>
-        <td style="padding:2pt 6pt 2pt 0;font-size:7pt;color:#374151;font-weight:600;vertical-align:middle;">${escHtml(g.label)}</td>
-        <td style="padding:2pt 4pt 2pt 0;font-size:7pt;font-weight:700;color:#0F172A;text-align:right;vertical-align:middle;">${g.count}</td>
-        <td style="padding:2pt 0;vertical-align:middle;">
+        <td style="padding:1.5pt 5pt 1.5pt 0;font-size:7pt;color:#374151;font-weight:700;vertical-align:middle;">${escHtml(g.label)}</td>
+        <td style="padding:1.5pt 4pt 1.5pt 0;font-size:7pt;font-weight:700;color:${g.color};text-align:right;vertical-align:middle;">${g.count}</td>
+        <td style="padding:1.5pt 0;vertical-align:middle;">
           <span style="font-size:6.5pt;font-weight:700;color:white;background:${g.color};border-radius:9999pt;padding:1pt 4pt;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${g.pct}%</span>
         </td>
       </tr>`
     ).join('');
 
-    return `<div style="width:100%;max-width:220pt;margin:0 auto;">
+    // Build topic rows with their unique colors
+    let topicIdx = 0;
+    const topicRows: string[] = [];
+    for (const g of groups) {
+      for (let ti = 0; ti < g.subtopics.length; ti++) {
+        const sub = g.subtopics[ti];
+        let cIdx = topicIdx % PALETTE_32.length;
+        if (PALETTE_32[cIdx] === g.color) cIdx = (cIdx + 1) % PALETTE_32.length;
+        const tc = PALETTE_32[cIdx];
+        topicIdx++;
+        const topicLabel = sub.label === g.label ? `${g.label} (General)` : sub.label;
+        topicRows.push(`<tr>
+          <td style="padding:1.5pt 5pt 1.5pt 0;vertical-align:middle;">
+            <div style="width:6pt;height:6pt;border-radius:9999pt;background:${tc};-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+          </td>
+          <td style="padding:1.5pt 5pt 1.5pt 0;font-size:6.5pt;color:#475569;font-weight:500;vertical-align:middle;">${escHtml(topicLabel)}</td>
+          <td style="padding:1.5pt 4pt 1.5pt 0;font-size:6.5pt;font-weight:700;color:${tc};text-align:right;vertical-align:middle;">${sub.count}</td>
+          <td style="padding:1.5pt 0;vertical-align:middle;">
+            <span style="font-size:6pt;font-weight:700;color:white;background:${tc};border-radius:9999pt;padding:1pt 3pt;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${sub.pct}%</span>
+          </td>
+        </tr>`);
+      }
+    }
+
+    return `<div style="width:100%;max-width:230pt;margin:0 auto;">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="display:block;">
         ${outerPaths}
         ${innerPaths}
         <text x="${CX}" y="${CY - 9}" text-anchor="middle" dominant-baseline="auto" font-size="28" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${total}</text>
-        <text x="${CX}" y="${CY + 18}" text-anchor="middle" dominant-baseline="auto" font-size="10" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
-        <text x="${CX}" y="${SIZE - 6}" text-anchor="middle" font-size="7" fill="#CBD5E1" font-family="Inter,sans-serif">inner: subjects · outer: topics</text>
+        <text x="${CX}" y="${CY + 18}" text-anchor="middle" dominant-baseline="auto" font-size="10" fill="#94A3B8" font-family="Inter,sans-serif">total questions</text>
+        <text x="${CX}" y="${SIZE - 6}" text-anchor="middle" font-size="7" fill="#CBD5E1" font-family="Inter,sans-serif">inner: subjects · outer: all topics</text>
       </svg>
-      <table style="width:100%;border-collapse:collapse;margin-top:6pt;">
-        <tbody>${legendRows}</tbody>
+      <p style="font-size:6.5pt;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:0.06em;margin:8pt 0 3pt 0;">Subjects (inner ring)</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tbody>${subjectRows}</tbody>
+      </table>
+      <p style="font-size:6.5pt;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:0.06em;margin:6pt 0 3pt 0;">All Topics (outer ring)</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tbody>${topicRows.join('')}</tbody>
       </table>
     </div>`;
   }
+
+
 
   // ── Legend HTML ───────────────────────────────────────────────────────────
   // 2-column max, word-wrap instead of ellipsis so long names don't get cut off

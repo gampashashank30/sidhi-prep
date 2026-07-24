@@ -5,35 +5,47 @@ import { useWizardStore } from '@/store/wizardStore';
 import type { PDFSettings, AdImage, CoverSettings, Question } from '@/lib/types';
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
 
-// ─── Analytics Palette ────────────────────────────────────────────────────────
+// ─── Superb 32-color palette — vibrant, fully distinct hues ──────────────────
+// Subjects use every 4th color (0,4,8,12...) for maximum contrast between rings.
+// Subtopics get their own sequential unique colors from the full palette.
 
-const SUBJECT_COLORS = [
+const PALETTE_32: string[] = [
   '#6366F1', // indigo
-  '#14B89A', // teal
-  '#F59E0B', // amber
-  '#EF4444', // rose
-  '#10B981', // emerald
-  '#8B5CF6', // violet
-  '#3B82F6', // blue
   '#EC4899', // pink
-  '#F97316', // orange
+  '#14B8A6', // teal
+  '#F59E0B', // amber
+  '#8B5CF6', // violet
+  '#22C55E', // green
+  '#EF4444', // red
   '#06B6D4', // cyan
+  '#F97316', // orange
+  '#3B82F6', // blue
+  '#A855F7', // purple
+  '#84CC16', // lime
+  '#F43F5E', // rose
+  '#10B981', // emerald
+  '#FBBF24', // yellow
+  '#0EA5E9', // sky
+  '#D946EF', // fuchsia
+  '#4ADE80', // light green
+  '#FB923C', // light orange
+  '#38BDF8', // light sky
+  '#818CF8', // periwinkle
+  '#E879F9', // orchid
+  '#2DD4BF', // aqua
+  '#FDE047', // bright yellow
+  '#F87171', // coral
+  '#34D399', // seafoam
+  '#60A5FA', // cornflower
+  '#C084FC', // lavender
+  '#FB7185', // salmon
+  '#A3E635', // yellow-green
+  '#67E8F9', // ice blue
+  '#FCD34D', // gold
 ];
 
-/** Lighten a hex color towards white by `amount` (0–1) */
-function lightenColor(hex: string, amount: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const lr = Math.round(r + (255 - r) * amount);
-  const lg = Math.round(g + (255 - g) * amount);
-  const lb = Math.round(b + (255 - b) * amount);
-  return `#${lr.toString(16).padStart(2,'0')}${lg.toString(16).padStart(2,'0')}${lb.toString(16).padStart(2,'0')}`;
-}
-
 interface SubjectSlice  { label: string; count: number; pct: number; color: string; }
-interface SubtopicSlice { label: string; count: number; pct: number; color: string; subjectColor: string; }
+interface SubtopicSlice { label: string; count: number; pct: number; color: string; subjectColor: string; subjectLabel: string; }
 
 interface NestedSlices {
   subjects: SubjectSlice[];
@@ -43,8 +55,8 @@ interface NestedSlices {
 
 function buildNestedSlices(questions: Question[]): NestedSlices {
   const total = questions.length;
-  // Build subject → subtopic map
   const subjectMap = new Map<string, Map<string, number>>();
+
   for (const q of questions) {
     const subject  = q.subjectPath[0] ?? 'Uncategorised';
     const subtopic = q.subjectPath[1] ?? q.subjectPath[0] ?? 'General';
@@ -53,39 +65,52 @@ function buildNestedSlices(questions: Question[]): NestedSlices {
     inner.set(subtopic, (inner.get(subtopic) ?? 0) + 1);
   }
 
-  const subjects: SubjectSlice[]  = [];
+  const subjects: SubjectSlice[]   = [];
   const subtopics: SubtopicSlice[] = [];
 
-  Array.from(subjectMap.entries())
-    .sort((a, b) => {
-      const sa = Array.from(a[1].values()).reduce((s, v) => s + v, 0);
-      const sb = Array.from(b[1].values()).reduce((s, v) => s + v, 0);
-      return sb - sa;
-    })
-    .forEach(([subject, stMap], si) => {
-      const subjectColor = SUBJECT_COLORS[si % SUBJECT_COLORS.length];
-      const subjectCount = Array.from(stMap.values()).reduce((s, v) => s + v, 0);
-      subjects.push({
-        label: subject,
-        count: subjectCount,
-        pct: total > 0 ? Math.round((subjectCount / total) * 100) : 0,
-        color: subjectColor,
-      });
-      // Sort subtopics by count descending
-      Array.from(stMap.entries())
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([subtopic, cnt], ti) => {
-          // Outer ring: each subtopic gets a lightened tint of the subject color
-          const tint = lightenColor(subjectColor, 0.15 + ti * 0.1);
-          subtopics.push({
-            label: subtopic,
-            count: cnt,
-            pct: total > 0 ? Math.round((cnt / total) * 100) : 0,
-            color: tint,
-            subjectColor,
-          });
-        });
+  // Subject colors: stride of 4 across the palette for max contrast
+  const sortedSubjects = Array.from(subjectMap.entries()).sort((a, b) => {
+    const sa = Array.from(a[1].values()).reduce((s, v) => s + v, 0);
+    const sb = Array.from(b[1].values()).reduce((s, v) => s + v, 0);
+    return sb - sa;
+  });
+
+  let subtopicGlobalIdx = 0; // sequential across ALL subjects
+
+  sortedSubjects.forEach(([subject, stMap], si) => {
+    const subjectColor = PALETTE_32[(si * 4) % PALETTE_32.length];
+    const subjectCount = Array.from(stMap.values()).reduce((s, v) => s + v, 0);
+
+    subjects.push({
+      label: subject,
+      count: subjectCount,
+      pct: total > 0 ? Math.round((subjectCount / total) * 100) : 0,
+      color: subjectColor,
     });
+
+    // Sort subtopics by count descending; each gets a unique palette color
+    Array.from(stMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([subtopic, cnt]) => {
+        // Skip same-named subtopic if it matches the subject (single-level doc)
+        const topicLabel = subtopic === subject ? `${subject} (General)` : subtopic;
+        // Assign sequential unique color, skipping the subject's own color slot
+        let colorIdx = subtopicGlobalIdx % PALETTE_32.length;
+        // Ensure no subtopic accidentally gets the exact same color as its parent subject
+        if (PALETTE_32[colorIdx] === subjectColor) colorIdx = (colorIdx + 1) % PALETTE_32.length;
+        const topicColor = PALETTE_32[colorIdx];
+        subtopicGlobalIdx++;
+
+        subtopics.push({
+          label: topicLabel,
+          count: cnt,
+          pct: total > 0 ? Math.round((cnt / total) * 100) : 0,
+          color: topicColor,
+          subjectColor,
+          subjectLabel: subject,
+        });
+      });
+  });
 
   return { subjects, subtopics, total };
 }
@@ -108,11 +133,8 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
   const [hovered, setHovered] = useState<{ ring: 'inner' | 'outer'; idx: number } | null>(null);
 
   const SIZE = 260; const CX = 130; const CY = 130;
-  // Inner ring: subjects (r 48–74)
-  // Gap ring: 4px gap
-  // Outer ring: subtopics (r 80–105)
-  const R_IN_OUTER  = 72;  const R_IN_INNER  = 46;
-  const R_OUT_OUTER = 105; const R_OUT_INNER = 80;
+  const R_IN_OUTER  = 68;  const R_IN_INNER  = 42;   // inner: subjects
+  const R_OUT_OUTER = 106; const R_OUT_INNER = 76;   // outer: subtopics (8pt gap)
 
   if (subjects.length === 0) return null;
 
@@ -125,17 +147,17 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
     const d = buildArcPath(CX, CY, R_IN_OUTER, R_IN_INNER, angle, angle + sweep);
     const isHov = hovered?.ring === 'inner' && hovered.idx === i;
     innerArcs.push(
-      <path key={`in-${i}`} d={d} fill={sl.color} stroke="#fff" strokeWidth={2}
-        style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${isHov ? 1.05 : 1})`, transition: 'transform 0.2s, opacity 0.2s', opacity: hovered && !isHov ? 0.55 : 1, cursor: 'pointer' }}
+      <path key={`in-${i}`} d={d} fill={sl.color} stroke="#fff" strokeWidth={2.5}
+        style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${isHov ? 1.06 : 1})`, transition: 'transform 0.2s, opacity 0.2s', opacity: hovered && !isHov ? 0.4 : 1, cursor: 'pointer', filter: isHov ? `drop-shadow(0 0 4px ${sl.color}88)` : 'none' }}
         onMouseEnter={() => setHovered({ ring: 'inner', idx: i })}
         onMouseLeave={() => setHovered(null)}>
-        <title>{sl.label}: {sl.count} ({sl.pct}%)</title>
+        <title>{sl.label}: {sl.count} Qs ({sl.pct}%)</title>
       </path>
     );
     angle += sweep;
   });
 
-  // Outer arcs (subtopics)
+  // Outer arcs (subtopics — each with unique color)
   const outerArcs: React.JSX.Element[] = [];
   angle = -90;
   subtopics.forEach((sl, i) => {
@@ -145,47 +167,75 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
     const isHov = hovered?.ring === 'outer' && hovered.idx === i;
     outerArcs.push(
       <path key={`out-${i}`} d={d} fill={sl.color} stroke="#fff" strokeWidth={1.5}
-        style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${isHov ? 1.04 : 1})`, transition: 'transform 0.2s, opacity 0.2s', opacity: hovered && !isHov ? 0.55 : 1, cursor: 'pointer' }}
+        style={{ transformOrigin: `${CX}px ${CY}px`, transform: `scale(${isHov ? 1.04 : 1})`, transition: 'transform 0.2s, opacity 0.2s', opacity: hovered && !isHov ? 0.35 : 1, cursor: 'pointer', filter: isHov ? `drop-shadow(0 0 3px ${sl.color}99)` : 'none' }}
         onMouseEnter={() => setHovered({ ring: 'outer', idx: i })}
         onMouseLeave={() => setHovered(null)}>
-        <title>{sl.label}: {sl.count} ({sl.pct}%)</title>
+        <title>{sl.label} ({sl.subjectLabel}): {sl.count} Qs ({sl.pct}%)</title>
       </path>
     );
     angle += sweep;
   });
 
-  // Center label
-  const hoveredSlice = hovered?.ring === 'inner' ? subjects[hovered.idx] : hovered?.ring === 'outer' ? subtopics[hovered.idx] : null;
+  const hoveredSlice = hovered?.ring === 'inner' ? subjects[hovered.idx]
+    : hovered?.ring === 'outer' ? subtopics[hovered.idx] : null;
+  const centerColor  = hoveredSlice?.color ?? '#0F172A';
 
   return (
     <div>
+      {/* Chart */}
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: '100%', maxWidth: SIZE, height: 'auto', display: 'block', margin: '0 auto' }}>
         {outerArcs}
         {innerArcs}
-        {/* Center */}
-        <text x={CX} y={CY - 11} textAnchor="middle" dominantBaseline="auto" style={{ fontSize: 28, fontWeight: 700, fill: '#0F172A', fontFamily: 'inherit' }}>
+        <text x={CX} y={CY - 12} textAnchor="middle" dominantBaseline="auto"
+          style={{ fontSize: 30, fontWeight: 700, fill: centerColor, fontFamily: 'inherit', transition: 'fill 0.2s' }}>
           {hoveredSlice ? hoveredSlice.count : total}
         </text>
-        <text x={CX} y={CY + 14} textAnchor="middle" dominantBaseline="auto" style={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'inherit' }}>
-          {hoveredSlice ? hoveredSlice.label.slice(0, 14) : 'questions'}
+        <text x={CX} y={CY + 14} textAnchor="middle" dominantBaseline="auto"
+          style={{ fontSize: 9.5, fill: '#94A3B8', fontFamily: 'inherit' }}>
+          {hoveredSlice ? hoveredSlice.label.slice(0, 16) : 'total questions'}
         </text>
-        {/* Ring labels */}
-        <text x={CX} y={SIZE - 8} textAnchor="middle" style={{ fontSize: 8, fill: '#CBD5E1', fontFamily: 'inherit' }}>
-          inner: subjects · outer: topics
+        <text x={CX} y={SIZE - 7} textAnchor="middle"
+          style={{ fontSize: 7.5, fill: '#CBD5E1', fontFamily: 'inherit' }}>
+          inner: subjects · outer: all topics
         </text>
       </svg>
-      {/* Legend: subjects */}
-      <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: subjects.length > 5 ? '1fr 1fr' : '1fr', gap: '0.3rem 0.75rem' }}>
-        {subjects.map((sl, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0, padding: '0.15rem 0' }}
-            onMouseEnter={() => setHovered({ ring: 'inner', idx: i })}
-            onMouseLeave={() => setHovered(null)}>
-            <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '0.15rem', background: sl.color, flexShrink: 0 }} />
-            <span style={{ fontSize: '0.7rem', color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }} title={sl.label}>{sl.label}</span>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0F172A', flexShrink: 0 }}>{sl.count}</span>
-            <span style={{ fontSize: '0.65rem', color: '#fff', fontWeight: 600, background: sl.color, borderRadius: '9999px', padding: '0.05rem 0.3rem', flexShrink: 0 }}>{sl.pct}%</span>
-          </div>
-        ))}
+
+      {/* Subjects legend */}
+      <div style={{ marginTop: '0.875rem' }}>
+        <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94A3B8', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+          Subjects (inner ring)
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: subjects.length > 4 ? '1fr 1fr' : '1fr', gap: '0.25rem 0.75rem' }}>
+          {subjects.map((sl, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 0, padding: '0.1rem 0.3rem', borderRadius: '0.4rem', background: hovered?.ring === 'inner' && hovered.idx === i ? `${sl.color}18` : 'transparent', transition: 'background 0.15s', cursor: 'pointer' }}
+              onMouseEnter={() => setHovered({ ring: 'inner', idx: i })}
+              onMouseLeave={() => setHovered(null)}>
+              <span style={{ width: '0.625rem', height: '0.625rem', borderRadius: '0.15rem', background: sl.color, flexShrink: 0, boxShadow: `0 1px 3px ${sl.color}66` }} />
+              <span style={{ fontSize: '0.7rem', color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }} title={sl.label}>{sl.label}</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: sl.color, flexShrink: 0 }}>{sl.count}</span>
+              <span style={{ fontSize: '0.62rem', color: '#fff', fontWeight: 700, background: sl.color, borderRadius: '9999px', padding: '0.05rem 0.28rem', flexShrink: 0 }}>{sl.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* All Topics legend (outer ring) */}
+      <div style={{ marginTop: '0.75rem' }}>
+        <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94A3B8', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+          All Topics (outer ring)
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: subtopics.length > 6 ? '1fr 1fr' : '1fr', gap: '0.2rem 0.75rem', maxHeight: '12rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+          {subtopics.map((sl, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 0, padding: '0.1rem 0.3rem', borderRadius: '0.4rem', background: hovered?.ring === 'outer' && hovered.idx === i ? `${sl.color}18` : 'transparent', transition: 'background 0.15s', cursor: 'pointer' }}
+              onMouseEnter={() => setHovered({ ring: 'outer', idx: i })}
+              onMouseLeave={() => setHovered(null)}>
+              <span style={{ width: '0.5rem', height: '0.5rem', borderRadius: '50%', background: sl.color, flexShrink: 0, boxShadow: `0 1px 3px ${sl.color}55` }} />
+              <span style={{ fontSize: '0.67rem', color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }} title={`${sl.label} (${sl.subjectLabel})`}>{sl.label}</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: sl.color, flexShrink: 0 }}>{sl.count}</span>
+              <span style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 700, background: sl.color, borderRadius: '9999px', padding: '0.04rem 0.25rem', flexShrink: 0 }}>{sl.pct}%</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
