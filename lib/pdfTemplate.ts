@@ -682,6 +682,16 @@ export interface TemplateOptions {
 
 const CHART_COLORS = ['#6366F1','#14B89A','#F59E0B','#EF4444','#10B981','#8B5CF6','#3B82F6','#EC4899','#F97316','#06B6D4'];
 
+/** Lighten a hex color towards white — used for outer subtopic ring tints */
+function lightenHex(hex: string, amount: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff; const g = (n >> 8) & 0xff; const b = n & 0xff;
+  const lr = Math.round(r + (255 - r) * amount);
+  const lg = Math.round(g + (255 - g) * amount);
+  const lb = Math.round(b + (255 - b) * amount);
+  return `#${lr.toString(16).padStart(2,'0')}${lg.toString(16).padStart(2,'0')}${lb.toString(16).padStart(2,'0')}`;
+}
+
 interface AnalyticsSlice { label: string; count: number; pct: number; color: string; }
 
 interface SubjectGroup {
@@ -763,8 +773,8 @@ function renderAnalyticsPage(
   const total = questions.length;
   if (slices.length === 0) return '';
 
-  // ── Auto-hide donut if too many subjects (looks cluttered with 8+ slices) ──
-  const tooManyTopics = slices.length > 8;
+  // ── Nested donut: auto-hide only when subjects > 12 (nested donut handles more) ──
+  const tooManyTopics = slices.length > 12;
   const showDonut = charts.donut && !tooManyTopics;
 
   // ── Horizontal Bar Chart ───────────────────────────────────────────────────
@@ -805,29 +815,81 @@ function renderAnalyticsPage(
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${totalH}" width="100%" height="auto" preserveAspectRatio="xMinYMin meet" style="display:block;overflow:visible;">${svg}</svg>`;
   }
 
-  // ── Donut SVG ─────────────────────────────────────────────────────────────
-  // Uses viewBox + width="100%" with explicit max-width container so it doesn't overflow.
+  // ── Nested Donut SVG (inner=subjects, outer=subtopics) ───────────────────
+  // Scales to container via width="100%" + viewBox. Inner and outer rings are
+  // colour-coded: outer subtopic arcs are lightened tints of the parent subject.
   function buildDonutSvg(): string {
-    const SIZE = 200; const CX = 100; const CY = 100;
-    const R_OUT = 88; const R_IN = 52;
-    let paths = '';
+    // Coordinate system: 240×240 units, center (120,120)
+    const SIZE = 240; const CX = 120; const CY = 120;
+    const R_IN_OUT  = 70;  const R_IN_IN  = 44;   // inner ring (subjects)
+    const R_OUT_OUT = 106; const R_OUT_IN = 78;   // outer ring (subtopics, 8px gap)
+
+    let innerPaths = ''; let outerPaths = '';
+
+    // ── Inner ring: subjects ─────────────────────────────────────────────────
     let angle = -90;
-    for (const sl of slices) {
-      // Guard: skip slices with zero count
-      if (sl.count <= 0) continue;
-      const sweep = (sl.count / total) * 360;
-      const d = buildSvgArcPath(CX, CY, R_OUT, R_IN, angle, angle + sweep, 'donut');
-      // -webkit-print-color-adjust on path via inline style
-      paths += `<path d="${d}" fill="${sl.color}" stroke="white" stroke-width="2.5" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
+    for (const g of groups) {
+      if (g.count <= 0) continue;
+      const sweep = Math.min((g.count / total) * 360, 359.999);
+      const large = sweep > 180 ? 1 : 0;
+      const toXY  = (r: number, deg: number) => ({
+        x: CX + r * Math.cos((deg * Math.PI) / 180),
+        y: CY + r * Math.sin((deg * Math.PI) / 180),
+      });
+      const s  = toXY(R_IN_OUT, angle);    const e  = toXY(R_IN_OUT, angle + sweep);
+      const si = toXY(R_IN_IN,  angle);    const ei = toXY(R_IN_IN,  angle + sweep);
+      const d  = `M ${s.x} ${s.y} A ${R_IN_OUT} ${R_IN_OUT} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${R_IN_IN} ${R_IN_IN} 0 ${large} 0 ${si.x} ${si.y} Z`;
+      innerPaths += `<path d="${d}" fill="${g.color}" stroke="white" stroke-width="2" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
       angle += sweep;
     }
-    // Center text
-    const centerLabel = total.toString();
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:${SIZE}px;margin:0 auto;">
-      ${paths}
-      <text x="${CX}" y="${CY - 8}" text-anchor="middle" dominant-baseline="auto" font-size="26" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${escHtml(centerLabel)}</text>
-      <text x="${CX}" y="${CY + 18}" text-anchor="middle" dominant-baseline="auto" font-size="11" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
-    </svg>`;
+
+    // ── Outer ring: subtopics ────────────────────────────────────────────────
+    angle = -90;
+    for (const g of groups) {
+      for (let ti = 0; ti < g.subtopics.length; ti++) {
+        const sub = g.subtopics[ti];
+        if (sub.count <= 0) continue;
+        const tint  = lightenHex(g.color, 0.15 + ti * 0.1);
+        const sweep = Math.min((sub.count / total) * 360, 359.999);
+        const large = sweep > 180 ? 1 : 0;
+        const toXY  = (r: number, deg: number) => ({
+          x: CX + r * Math.cos((deg * Math.PI) / 180),
+          y: CY + r * Math.sin((deg * Math.PI) / 180),
+        });
+        const s  = toXY(R_OUT_OUT, angle);  const e  = toXY(R_OUT_OUT, angle + sweep);
+        const si = toXY(R_OUT_IN,  angle);  const ei = toXY(R_OUT_IN,  angle + sweep);
+        const d  = `M ${s.x} ${s.y} A ${R_OUT_OUT} ${R_OUT_OUT} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${R_OUT_IN} ${R_OUT_IN} 0 ${large} 0 ${si.x} ${si.y} Z`;
+        outerPaths += `<path d="${d}" fill="${tint}" stroke="white" stroke-width="1.5" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;"/>`;
+        angle += sweep;
+      }
+    }
+
+    // ── Subject legend (compact, one row per subject) ────────────────────────
+    const legendRows = groups.map(g =>
+      `<tr>
+        <td style="padding:2pt 6pt 2pt 0;vertical-align:middle;">
+          <div style="width:8pt;height:8pt;border-radius:2pt;background:${g.color};-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+        </td>
+        <td style="padding:2pt 6pt 2pt 0;font-size:7pt;color:#374151;font-weight:600;vertical-align:middle;">${escHtml(g.label)}</td>
+        <td style="padding:2pt 4pt 2pt 0;font-size:7pt;font-weight:700;color:#0F172A;text-align:right;vertical-align:middle;">${g.count}</td>
+        <td style="padding:2pt 0;vertical-align:middle;">
+          <span style="font-size:6.5pt;font-weight:700;color:white;background:${g.color};border-radius:9999pt;padding:1pt 4pt;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${g.pct}%</span>
+        </td>
+      </tr>`
+    ).join('');
+
+    return `<div style="width:100%;max-width:220pt;margin:0 auto;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="display:block;">
+        ${outerPaths}
+        ${innerPaths}
+        <text x="${CX}" y="${CY - 9}" text-anchor="middle" dominant-baseline="auto" font-size="28" font-weight="700" fill="#0F172A" font-family="Inter,sans-serif">${total}</text>
+        <text x="${CX}" y="${CY + 18}" text-anchor="middle" dominant-baseline="auto" font-size="10" fill="#94A3B8" font-family="Inter,sans-serif">questions</text>
+        <text x="${CX}" y="${SIZE - 6}" text-anchor="middle" font-size="7" fill="#CBD5E1" font-family="Inter,sans-serif">inner: subjects · outer: topics</text>
+      </svg>
+      <table style="width:100%;border-collapse:collapse;margin-top:6pt;">
+        <tbody>${legendRows}</tbody>
+      </table>
+    </div>`;
   }
 
   // ── Legend HTML ───────────────────────────────────────────────────────────
@@ -889,19 +951,13 @@ function renderAnalyticsPage(
       </table>`;
   }
 
-  // ── Donut block (only when ≤ 8 subjects) ─────────────────────────────────
+  // ── Donut block (auto-hidden when > 12 subjects) ─────────────────────────
   const donutBlock = showDonut ? `
     <div style="margin-bottom:14pt;padding:12pt 14pt;background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04));border:1px solid rgba(99,102,241,0.15);border-radius:10pt;break-inside:avoid;page-break-inside:avoid;overflow:hidden;">
-      <p style="font-size:7.5pt;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 8pt 0;">Donut Chart</p>
-      <div style="display:flex;align-items:center;gap:16pt;flex-wrap:wrap;">
-        <div style="flex-shrink:0;width:140pt;max-width:140pt;">
-          ${buildDonutSvg()}
-        </div>
-        <div style="flex:1;min-width:120pt;display:grid;grid-template-columns:repeat(${legendCols},1fr);gap:5pt 10pt;">
-          ${legendItems}
-        </div>
-      </div>
+      <p style="font-size:7.5pt;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 8pt 0;text-align:center;">Topic Distribution</p>
+      ${buildDonutSvg()}
     </div>` : '';
+
 
   return `
     <div style="break-before:page;page-break-before:always;position:relative;z-index:2;">
