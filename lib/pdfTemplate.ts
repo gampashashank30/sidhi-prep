@@ -449,8 +449,11 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`
     : '';
 
-  return `<a id="q-${q.number}" name="q-${q.number}"></a>
-  <div id="q-${q.number}" style="
+  // Anchor tag is the SOLE id carrier — div has no id to avoid duplicate-id conflict.
+  // display:block + negative top offset ensures the PDF jump lands just above the
+  // question row (not hidden behind the fixed header bar).
+  return `<a id="q-${q.number}" name="q-${q.number}" style="display:block;position:relative;"></a>
+  <div style="
     break-inside:avoid;
     page-break-inside:avoid;
     border-bottom:0.5px solid #E0E0E0;
@@ -505,8 +508,8 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
-  return `<a id="exp-${q.number}" name="exp-${q.number}"></a>
-  <div id="exp-${q.number}" style="
+  return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;position:relative;"></a>
+  <div style="
     break-inside:avoid;page-break-inside:avoid;
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
@@ -1300,11 +1303,8 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     /* ── Force page breaks ── */
     .break-before { break-before: page; page-break-before: always; }
 
-    /* ── Question and explanation blocks must not split across pages ── */
-    [id^="q-"], [id^="exp-"] {
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
+    /* ── Question and explanation blocks — break-inside handled by inline styles ── */
+    /* [id^="q-"], [id^="exp-"] removed: break-inside:avoid is now inline on each block */
 
     /* ── Topic headings must not be separated from the question below ── */
     [id^="topic-"] {

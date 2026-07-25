@@ -99,12 +99,28 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const page = await browser.newPage();
 
   try {
-    // Math is rendered server-side (katex.renderToString) so we just need
-    // the DOM to be ready — 'domcontentloaded' is fast and reliable with setContent.
-    await page.setContent(html, {
-      waitUntil: 'domcontentloaded',
-      timeout: 45000,
-    });
+    // IMPORTANT: We use page.goto('file://...') instead of page.setContent()
+    // because setContent loads the page as 'about:blank', which means all href="#q-N"
+    // links resolve to "about:blank#q-N" (a different document) in the PDF.
+    // With a file:// URL the page has a real base URL, so "#q-N" resolves as a
+    // same-page fragment — Puppeteer correctly converts it to a named PDF destination.
+    //
+    // We cannot use data: URIs here because encodeURIComponent on a large HTML
+    // document can produce URLs exceeding Chrome's ~2MB URL limit.
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const tmpFile = path.join(os.tmpdir(), `siddhi-pdf-${Date.now()}.html`);
+    fs.writeFileSync(tmpFile, html, 'utf8');
+    try {
+      await page.goto(`file://${tmpFile}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 45000,
+      });
+    } finally {
+      // Clean up temp file regardless of success/failure
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
 
     const { primaryColor = '#1B5EA7', accentColor = '#14B89A' } = opts.settings;
 
