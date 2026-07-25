@@ -362,6 +362,48 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   return parts.join('\n');
 }
 
+// ─── Passage / Direction block ───────────────────────────────────────────────
+// Rendered ONCE before the first question in a direction group.
+// Uses break-after:avoid to stay glued to Q1 of the group on the same page.
+
+function renderPassageBlock(passageText: string, groupRange: [number, number], primaryColor: string): string {
+  const [startQ, endQ] = groupRange;
+  const label = `Direction (Q${startQ}\u2013Q${endQ})`;
+
+  return `
+  <div style="
+    break-inside:avoid;
+    break-after:avoid;
+    page-break-inside:avoid;
+    page-break-after:avoid;
+    background:${primaryColor}08;
+    border:1px solid ${primaryColor}30;
+    border-left:3px solid ${primaryColor};
+    border-radius:4px;
+    padding:8px 10px 7px 10px;
+    margin:8px 0 4px 0;
+    position:relative;z-index:2;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  ">
+    <div style="
+      font-size:7pt;
+      font-weight:700;
+      color:${primaryColor};
+      letter-spacing:0.6px;
+      text-transform:uppercase;
+      margin-bottom:5px;
+    ">${escHtml(label)}</div>
+    <div style="
+      font-size:8.5pt;
+      color:#1F1F1F;
+      line-height:1.6;
+      word-break:break-word;
+      white-space:pre-wrap;
+    ">${renderMath(stripMarkdown(passageText))}</div>
+  </div>`;
+}
+
 // ─── Question block ───────────────────────────────────────────────────────────
 
 function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: number): string {
@@ -414,6 +456,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     border-bottom:0.5px solid #E0E0E0;
     padding:6px 0 5px 0;
     position:relative;z-index:2;
+    ${q.passageText ? `border-left:2px solid ${primaryColor}40;padding-left:6px;` : ''}
   ">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
       <div style="flex:1;min-width:0;">
@@ -1087,6 +1130,12 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
       sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
       prevTopicKey = topicKey;
     }
+
+    // Render passage block once before the first question in a direction group
+    if (q.isFirstInGroup && q.passageText && q.groupRange) {
+      sections.push(renderPassageBlock(q.passageText, q.groupRange, primaryColor));
+    }
+
     sections.push(renderQuestionBlock(q, settings, displayNumber));
 
     // Ad insertion: after every N questions, inject a full ad page.
@@ -1116,6 +1165,29 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     for (let qi = 0; qi < questions.length; qi++) {
       const q = questions[qi];
       const displayNumber = qi + 1; // Sequential 1-based display number
+
+      // For the first Q in a passage group, include a compact passage reference
+      // so explanations are self-contained (reader doesn't have to flip back)
+      if (q.isFirstInGroup && q.passageText && q.groupRange) {
+        const [s, e] = q.groupRange;
+        sections.push(`
+          <div style="
+            break-inside:avoid;break-after:avoid;
+            page-break-inside:avoid;page-break-after:avoid;
+            background:${primaryColor}06;
+            border-left:3px solid ${primaryColor}50;
+            border-radius:3px;
+            padding:6px 9px 5px 9px;
+            margin-bottom:6px;
+            position:relative;z-index:2;
+          ">
+            <div style="font-size:6.5pt;font-weight:700;color:${primaryColor};letter-spacing:0.5px;text-transform:uppercase;margin-bottom:3px;">
+              Direction (Q${s}\u2013Q${e}) — Passage Reference
+            </div>
+            <div style="font-size:7.5pt;color:#444;line-height:1.55;word-break:break-word;white-space:pre-wrap;">${renderMath(stripMarkdown(q.passageText))}</div>
+          </div>`);
+      }
+
       sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
 
       // Same exact-count ad insertion in the explanations section

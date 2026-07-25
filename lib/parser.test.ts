@@ -283,4 +283,167 @@ Difficulty:Easy`;
     expect(questions[0].answer).toBe('C');
   });
 
+  // ── TEST 13: Direction block — passage attached to all Qs in range ──────────
+  it('attaches passage text to all questions in a D.x-y) range', () => {
+    const block = `D.1-2)Read the passage and answer the questions.
+The quick brown fox jumps over the lazy dog.
+Q1.What does the fox jump over?
+A.A cat
+B.A fence
+C.The lazy dog
+D.A river
+Ans:C
+Exp:The passage states the fox jumps over the lazy dog.
+Subject:English > Reading
+Difficulty:Easy
+Q2.What adjective describes the fox?
+A.Lazy
+B.Quick
+C.Brown
+D.Both B and C
+Ans:D
+Exp:The fox is described as quick and brown.
+Subject:English > Reading
+Difficulty:Easy`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+    expect(errors).toHaveLength(0);
+    expect(questions).toHaveLength(2);
+
+    // Passage attached to both Qs
+    expect(questions[0].passageText).toContain('quick brown fox');
+    expect(questions[1].passageText).toContain('quick brown fox');
+
+    // isFirstInGroup only on Q1
+    expect(questions[0].isFirstInGroup).toBe(true);
+    expect(questions[1].isFirstInGroup).toBeFalsy();
+
+    // groupRange correct
+    expect(questions[0].groupRange).toEqual([1, 2]);
+    expect(questions[1].groupRange).toEqual([1, 2]);
+  });
+
+  // ── TEST 14: Multi-paragraph passage ───────────────────────────────────────
+  it('collects multi-paragraph passage text into a single passageText field', () => {
+    const block = `D.1-2)In the given passage, some words have been deleted.
+Postcolonial infrastructures often inhabit a schizophonic condition.
+Flyovers half-finished, railway stations calcified mid-renovation.
+Q1.What does the passage primarily discuss?
+A.Engineering problems
+B.Postcolonial infrastructure
+C.Railway economics
+D.Architecture
+Ans:B
+Exp:The passage is about postcolonial infrastructures.
+Subject:English > Cloze Test
+Difficulty:Hard
+Q2.What does the term schizophonic condition imply?
+A.A mental disorder
+B.Simultaneous obsolescence and futurity
+C.A type of engineering failure
+D.None of the above
+Ans:B
+Exp:Schizophonic means a simultaneity of two states.
+Subject:English > Cloze Test
+Difficulty:Hard`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+    expect(errors).toHaveLength(0);
+    expect(questions).toHaveLength(2);
+
+    // All passage paragraphs collected
+    const passage = questions[0].passageText ?? '';
+    expect(passage).toContain('In the given passage');
+    expect(passage).toContain('Postcolonial infrastructures');
+    expect(passage).toContain('Flyovers half-finished');
+  });
+
+  // ── TEST 15: Mixed document — standalone Qs before and after direction block
+  it('correctly handles a mixed document with standalone and passage-linked Qs', () => {
+    const standalone1 = `Q1.What is the capital of India?
+A.Mumbai
+B.Delhi
+C.Chennai
+D.Kolkata
+Ans:B
+Exp:New Delhi is the capital of India.
+Subject:GS > Geography
+Difficulty:Easy`;
+
+    const direction = `D.2-3)Read this passage carefully.
+This is the passage text.
+Q2.What should be read carefully?
+A.The question
+B.The passage
+C.The options
+D.The explanation
+Ans:B
+Exp:The direction says to read the passage.
+Subject:English > Reading
+Difficulty:Medium
+Q3.How many paragraphs does this passage have?
+A.One
+B.Two
+C.Three
+D.Four
+Ans:A
+Exp:There is one paragraph in the passage.
+Subject:English > Reading
+Difficulty:Medium`;
+
+    const standalone2 = `Q4.What is 2 + 2?
+A.3
+B.4
+C.5
+D.6
+Ans:B
+Exp:Basic arithmetic.
+Subject:GS > Maths
+Difficulty:Easy`;
+
+    const { questions, errors } = parseQuestions(makeParas([standalone1, direction, standalone2].join('\n')));
+    expect(errors).toHaveLength(0);
+    expect(questions).toHaveLength(4);
+
+    // Q1 and Q4 are standalone — no passage fields
+    expect(questions[0].passageText).toBeUndefined();
+    expect(questions[3].passageText).toBeUndefined();
+
+    // Q2 and Q3 have passage fields
+    expect(questions[1].passageText).toContain('This is the passage text');
+    expect(questions[2].passageText).toContain('This is the passage text');
+    expect(questions[1].isFirstInGroup).toBe(true);
+    expect(questions[2].isFirstInGroup).toBeFalsy();
+  });
+
+  // ── TEST 16: All direction syntax variants ─────────────────────────────────
+  it('parses direction headers in all supported syntax variants', () => {
+    const makeBlock = (header: string) => `${header}Passage text here.
+Q1.Sample question?
+A.Option A
+B.Option B
+C.Option C
+D.Option D
+Ans:A
+Exp:Explanation.
+Subject:GS > Test
+Difficulty:Easy`;
+
+    const variants = [
+      'D.1-1)',         // D dot
+      'Direction.1-1)', // Direction dot
+      'd.1-1)',         // lowercase d dot
+      'D 1-1)',         // D space (no dot)
+      'DIRECTION.1-1)', // all caps
+    ];
+
+    for (const variant of variants) {
+      const { questions, errors } = parseQuestions(makeParas(makeBlock(variant)));
+      expect(errors).toHaveLength(0);
+      expect(questions).toHaveLength(1);
+      expect(questions[0].passageText).toContain('Passage text here');
+    }
+  });
+
 });
+

@@ -21,6 +21,11 @@ const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Medium|Hard)(?:\*\*|\*|__|_)?\s*$/i;
 
+// Direction / passage block header — all three syntax variants (case-insensitive):
+//   D.9-13)   |   Direction.9-13)   |   d.1-5)   |   D 9-13)   |   Direction 1-5)
+// Captures: group 1 = startQ, group 2 = endQ
+const RE_DIRECTION = /^(?:\*\*|\*|__|_)?[Dd](?:irection)?\s*\.?\s*(\d+)\s*[-\u2013]\s*(\d+)\s*\)/i;
+
 // ─── Topic normalisation (spec §2.4) ─────────────────────────────────────────
 
 function parseSubjectPath(raw: string): string[] {
@@ -54,11 +59,45 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
   let i = 0;
   let expectedNumber = 1;
 
+  // ── Pending direction/passage state ─────────────────────────────────────────
+  // Populated when we encounter a "D.9-13)" header. Cleared after the last Q
+  // in the declared range is emitted.
+  let pendingDirection: {
+    startQ: number;
+    endQ: number;
+    passageText: string;
+  } | null = null;
+
   while (i < paragraphs.length) {
     const para = paragraphs[i];
 
     // Skip blank / whitespace-only lines (already filtered, but belt+suspenders)
     if (!para.trim()) { i++; continue; }
+
+    // ── Look for a direction/passage block header ──────────────────────────────
+    const dirMatch = para.match(RE_DIRECTION);
+    if (dirMatch) {
+      const startQ = parseInt(dirMatch[1], 10);
+      const endQ   = parseInt(dirMatch[2], 10);
+
+      // Passage text starts on the same line after the closing ')'
+      // e.g. "D.9-13)In the given passage..." → the part after ')' is first line
+      const afterParen = para.replace(RE_DIRECTION, '').trim();
+      let passageText = afterParen;
+      i++;
+
+      // Collect all following non-Q, non-direction lines as passage body
+      while (i < paragraphs.length) {
+        const next = paragraphs[i];
+        if (RE_QUESTION.test(next))  break; // first Q of the group starts
+        if (RE_DIRECTION.test(next)) break; // another direction block (shouldn't happen)
+        passageText += (passageText ? '\n' : '') + next.trim();
+        i++;
+      }
+
+      pendingDirection = { startQ, endQ, passageText: passageText.trim() };
+      continue; // go back to top of loop to parse the first Q
+    }
 
     // ── Look for a question start ────────────────────────────────────────────
     const qMatch = para.match(RE_QUESTION);
@@ -266,7 +305,7 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
     }
 
     // ── All fields valid — emit question ──────────────────────────────────────
-    questions.push({
+    const emittedQ: Question = {
       number: qNumber,
       text: questionText,
       options: options as { A: string; B: string; C: string; D: string },
@@ -274,7 +313,21 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       explanation,
       subjectPath,
       difficulty: difficulty!,
-    });
+    };
+
+    // Attach passage/direction group fields if this Q falls in the active range
+    if (pendingDirection && qNumber >= pendingDirection.startQ && qNumber <= pendingDirection.endQ) {
+      emittedQ.passageText  = pendingDirection.passageText;
+      emittedQ.groupRange   = [pendingDirection.startQ, pendingDirection.endQ];
+      emittedQ.isFirstInGroup = (qNumber === pendingDirection.startQ);
+
+      // Clear once the last Q in the range is processed
+      if (qNumber === pendingDirection.endQ) {
+        pendingDirection = null;
+      }
+    }
+
+    questions.push(emittedQ);
   }
 
   // ── Document-level checks ──────────────────────────────────────────────────

@@ -294,6 +294,69 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
   );
 }
 
+// ─── Passage Banner (shown above the first Q card in a direction group) ────────────────────
+
+function PassageBanner({ q }: { q: Question }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!q.passageText || !q.groupRange) return null;
+  const [startQ, endQ] = q.groupRange;
+  const label = `Direction \u2014 Q${startQ}\u2013${endQ}`;
+
+  // Show a short preview (first 200 chars) when collapsed
+  const preview = q.passageText.length > 200
+    ? q.passageText.slice(0, 200).trimEnd() + '\u2026'
+    : q.passageText;
+
+  return (
+    <div style={{
+      borderRadius: '0.625rem',
+      border: '1.5px solid rgba(27,94,167,0.25)',
+      borderLeft: '3.5px solid var(--primary)',
+      background: 'rgba(27,94,167,0.04)',
+      padding: '0.625rem 0.875rem',
+      marginTop: '0.5rem',
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+        <span style={{
+          fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.07em',
+          textTransform: 'uppercase', color: 'var(--primary)',
+        }}>
+          📌 {label}
+        </span>
+        <button
+          onClick={() => setExpanded(x => !x)}
+          style={{
+            border: 'none', background: 'rgba(27,94,167,0.08)',
+            borderRadius: '0.375rem', cursor: 'pointer',
+            padding: '2px 8px', fontSize: '0.625rem', fontWeight: 600,
+            color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '3px',
+            transition: 'background 0.15s',
+          }}
+        >
+          {expanded ? 'Collapse' : 'Read passage'}
+          <svg
+            style={{ width: '10px', height: '10px', transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'none' }}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Passage text */}
+      <p style={{
+        fontSize: '0.75rem', color: '#374151', lineHeight: 1.6,
+        margin: '0.4rem 0 0 0', whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+      }}>
+        {expanded ? q.passageText : preview}
+      </p>
+    </div>
+  );
+}
+
+
 // ─── Step 2 Main Component ────────────────────────────────────────────────────
 
 export default function Step2Cover() {
@@ -692,13 +755,18 @@ export default function Step2Cover() {
               </div>
             ) : (
               displayedQuestions.map(q => (
-                <QuestionCard
-                  key={q.number}
-                  q={q}
-                  displayNum={qDisplayNum.get(q.number) ?? q.number}
-                  isSelected={selectedSet.has(q.number)}
-                  onToggle={handleQToggle}
-                />
+                <React.Fragment key={q.number}>
+                  {/* Show passage banner before the first Q in a direction group */}
+                  {q.isFirstInGroup && (
+                    <PassageBanner q={q} />
+                  )}
+                  <QuestionCard
+                    q={q}
+                    displayNum={qDisplayNum.get(q.number) ?? q.number}
+                    isSelected={selectedSet.has(q.number)}
+                    onToggle={handleQToggle}
+                  />
+                </React.Fragment>
               ))
             )}
           </div>

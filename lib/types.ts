@@ -10,6 +10,12 @@ export type Question = {
   explanation: string;
   subjectPath: string[]; // e.g. ["GS", "History", "Art and Culture", "Classical Music"]
   difficulty: 'Easy' | 'Medium' | 'Hard';
+
+  // ── Passage / Direction group (optional) ────────────────────────────────────
+  // Set when this question belongs to a "D.9-13)" or "Direction.1-5)" block.
+  passageText?: string;            // Shared passage text for the group
+  isFirstInGroup?: boolean;        // True only for the first Q in the group
+  groupRange?: [number, number];   // Declared range, e.g. [9, 13]
 };
 
 // ─── Validation error type ───────────────────────────────────────────────────
