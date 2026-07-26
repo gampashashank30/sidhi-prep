@@ -214,7 +214,7 @@ const SOCIAL_ICONS: Record<string, string> = {
 // Each icon is wrapped in a 7mm × 7mm div for consistent, large display in the footer
 function buildSocialItems(links: PDFSettings['socialLinks'], accentColor: string): string {
   const wrap = (icon: string, href: string) =>
-    `<a href="${escHtml(href)}" style="display:inline-flex;width:7mm;height:7mm;flex-shrink:0;text-decoration:none;" title="">${icon}</a>`;
+    `<a href="${escHtml(href)}" style="display:inline-flex;width:7mm;height:7mm;flex-shrink:0;text-decoration:none;pointer-events:auto;" title="">${icon}</a>`;
   const items: string[] = [];
   if (links.telegram)       items.push(wrap(SOCIAL_ICONS.telegram,       links.telegram));
   if (links.instagram)      items.push(wrap(SOCIAL_ICONS.instagram,      links.instagram));
@@ -250,7 +250,8 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       font-size:9.5pt;font-weight:700;
       letter-spacing:0.3px;
       border-radius:2px;
-      z-index:100;
+      z-index:1;
+      pointer-events:none;
       -webkit-print-color-adjust:exact;
       print-color-adjust:exact;
     ">
@@ -279,12 +280,13 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       height:${fHeight};
       display:flex;align-items:center;justify-content:center;
       gap:4mm;
-      z-index:150;
+      z-index:1;
+      pointer-events:none;
       -webkit-print-color-adjust:exact;
       print-color-adjust:exact;
     ">
       ${socialItems
-        ? `<span style="display:flex;align-items:center;gap:3.5mm;">${socialItems}</span>`
+        ? `<span style="display:flex;align-items:center;gap:3.5mm;pointer-events:auto;">${socialItems}</span>`
         : ''}
     </div>`);
 
@@ -449,11 +451,9 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`
     : '';
 
-  // Anchor tag is the SOLE id carrier — div has no id to avoid duplicate-id conflict.
-  // display:block + negative top offset ensures the PDF jump lands just above the
-  // question row (not hidden behind the fixed header bar).
-  return `<a id="q-${q.number}" name="q-${q.number}" style="display:block;position:relative;"></a>
-  <div style="
+  // id + name on the content div itself (not a separate empty tag) so mobile PDF
+  // readers get real bounding box coordinates and can navigate accurately.
+  return `<div id="q-${q.number}" name="q-${q.number}" style="
     break-inside:avoid;
     page-break-inside:avoid;
     border-bottom:0.5px solid #E0E0E0;
@@ -482,24 +482,27 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
   const label = path[path.length - 1];
   const parent = path.length > 1 ? path.slice(0, -1).join(' › ') : '';
 
-  // Generate explicit anchor tags for all topic path prefixes so TOC items redirect correctly
-  const anchorTags: string[] = [];
+  // Prefix slugs get zero-height named spans inside the heading div — visible to
+  // all PDF readers (mobile & desktop) since the parent container has real dimensions.
+  const anchorSpans: string[] = [];
   for (let d = 1; d <= path.length; d++) {
     const prefixPath = path.slice(0, d);
     const prefixSlug = slugify(prefixPath);
     if (!emittedSlugs.has(prefixSlug)) {
       emittedSlugs.add(prefixSlug);
-      anchorTags.push(`<a id="topic-${prefixSlug}" name="topic-${prefixSlug}"></a>`);
+      anchorSpans.push(`<span id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="display:block;height:0;overflow:hidden;"></span>`);
     }
   }
 
-  return `${anchorTags.join('')}<div id="topic-${fullSlug}" style="
+  // id + name on the outer div so mobile PDF readers get real bounding-box coords
+  return `<div id="topic-${fullSlug}" name="topic-${fullSlug}" style="
     break-after:avoid;page-break-after:avoid;
     background:${primaryColor}15;
     border-left:3px solid ${primaryColor};
     padding:4px 8px;margin:10px 0 4px 0;
     position:relative;z-index:2;
   ">
+    ${anchorSpans.join('')}
     ${parent ? `<div style="font-size:6.5pt;color:#888;margin-bottom:1px;">${escHtml(parent)}</div>` : ''}
     <div style="font-weight:700;font-size:9.5pt;color:${primaryColor};">${escHtml(label)}</div>
   </div>`;
@@ -508,8 +511,8 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
-  return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;position:relative;"></a>
-  <div style="
+  // id + name on content div so mobile PDF readers get real bounding-box coordinates
+  return `<div id="exp-${q.number}" name="exp-${q.number}" style="
     break-inside:avoid;page-break-inside:avoid;
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
