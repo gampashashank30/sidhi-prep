@@ -302,10 +302,13 @@ function PassageBanner({ q }: { q: Question }) {
   const [startQ, endQ] = q.groupRange;
   const label = `Direction \u2014 Q${startQ}\u2013${endQ}`;
 
+  // Unescape markdown escapes so blanks (\_ → _) display correctly, matching the PDF output
+  const displayText = unescapeMarkdown(q.passageText);
+
   // Show a short preview (first 200 chars) when collapsed
-  const preview = q.passageText.length > 200
-    ? q.passageText.slice(0, 200).trimEnd() + '\u2026'
-    : q.passageText;
+  const preview = displayText.length > 200
+    ? displayText.slice(0, 200).trimEnd() + '\u2026'
+    : displayText;
 
   return (
     <div style={{
@@ -350,7 +353,7 @@ function PassageBanner({ q }: { q: Question }) {
         margin: '0.4rem 0 0 0', whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}>
-        {expanded ? q.passageText : preview}
+        {expanded ? displayText : preview}
       </p>
     </div>
   );
