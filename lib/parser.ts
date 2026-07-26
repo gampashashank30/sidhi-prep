@@ -21,10 +21,10 @@ const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Medium|Hard)(?:\*\*|\*|__|_)?\s*$/i;
 
-// Direction / passage block header — all three syntax variants (case-insensitive):
-//   D.9-13)   |   Direction.9-13)   |   d.1-5)   |   D 9-13)   |   Direction 1-5)
+// Direction / passage block header — all syntax variants (case-insensitive):
+//   D.1-5) | Direc.1-5) | Directions.1-5) | Dir.1-5) | Direction (Q1-5) | D 1-5)
 // Captures: group 1 = startQ, group 2 = endQ
-const RE_DIRECTION = /^(?:\*\*|\*|__|_)?[Dd](?:irection)?\s*\.?\s*(\d+)\s*[-\u2013]\s*(\d+)\s*\)/i;
+const RE_DIRECTION = /^(?:\*\*|\*|__|_)?[Dd](?:ir(?:ection)?s?|irec(?:t)?)?\s*\(?\s*\.?\s*(?:Q\.?\s*)?(\d+)\s*[-\u2013]\s*(\d+)\s*\)/i;
 
 // ─── Topic normalisation (spec §2.4) ─────────────────────────────────────────
 

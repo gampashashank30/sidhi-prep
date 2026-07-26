@@ -431,10 +431,14 @@ Difficulty:Easy`;
 
     const variants = [
       'D.1-1)',         // D dot
+      'Direc.1-1)',     // Direc dot
+      'Directions.1-1)',// Directions dot
+      'Dir.1-1)',       // Dir dot
       'Direction.1-1)', // Direction dot
       'd.1-1)',         // lowercase d dot
       'D 1-1)',         // D space (no dot)
       'DIRECTION.1-1)', // all caps
+      'Direction (Q1-1)', // with Q prefix
     ];
 
     for (const variant of variants) {
