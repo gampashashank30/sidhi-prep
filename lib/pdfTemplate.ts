@@ -482,30 +482,30 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
   const label = path[path.length - 1];
   const parent = path.length > 1 ? path.slice(0, -1).join(' › ') : '';
 
-  // Prefix slugs get zero-height named spans inside the heading div — visible to
-  // all PDF readers (mobile & desktop) since the parent container has real dimensions.
+  // Prefix slugs get 1px x 1px hidden anchor spans inside the heading div so PDF generators
+  // and mobile PDF readers (Google Drive Mobile, iOS Files) see valid layout boxes.
   const anchorSpans: string[] = [];
   for (let d = 1; d <= path.length; d++) {
     const prefixPath = path.slice(0, d);
     const prefixSlug = slugify(prefixPath);
     if (!emittedSlugs.has(prefixSlug)) {
       emittedSlugs.add(prefixSlug);
-      anchorSpans.push(`<span id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="display:block;height:0;overflow:hidden;"></span>`);
+      anchorSpans.push(`<span id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;"></span>`);
     }
   }
 
-  // id + name on the outer div so mobile PDF readers get real bounding-box coords
-  return `<div id="topic-${fullSlug}" name="topic-${fullSlug}" style="
+  return `<h2 id="topic-${fullSlug}" name="topic-${fullSlug}" style="
     break-after:avoid;page-break-after:avoid;
     background:${primaryColor}15;
     border-left:3px solid ${primaryColor};
     padding:4px 8px;margin:10px 0 4px 0;
     position:relative;z-index:2;
+    font-size:inherit;font-weight:normal;
   ">
     ${anchorSpans.join('')}
     ${parent ? `<div style="font-size:6.5pt;color:#888;margin-bottom:1px;">${escHtml(parent)}</div>` : ''}
     <div style="font-weight:700;font-size:9.5pt;color:${primaryColor};">${escHtml(label)}</div>
-  </div>`;
+  </h2>`;
 }
 
 // ─── Explanation entry ────────────────────────────────────────────────────────

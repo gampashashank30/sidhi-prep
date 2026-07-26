@@ -117,21 +117,6 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
         waitUntil: 'domcontentloaded',
         timeout: 45000,
       });
-
-      // ── CRITICAL: fix internal link annotations for mobile PDF viewers ──────
-      // Google Drive mobile and many mobile PDF apps require internal links to be
-      // "GoToR" named-destination PDF actions with the full file path URI, not
-      // relative fragment anchors.  We rewrite every href="#X" to an absolute
-      // file://...#X URL so Chromium encodes them as proper PDF named-destination
-      // annotations that survive Google Drive's server-side re-render pipeline.
-      await page.evaluate(() => {
-        const base = window.location.href; // file:///tmp/siddhi-pdf-XXXX.html
-        document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach(a => {
-          const frag = a.getAttribute('href')!; // e.g. "#q-5"
-          a.setAttribute('href', base + frag);  // file:///tmp/...#q-5
-        });
-      });
-
     } finally {
       // Clean up temp file regardless of success/failure
       try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
