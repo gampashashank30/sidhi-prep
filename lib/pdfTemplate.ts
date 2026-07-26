@@ -451,9 +451,11 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`
     : '';
 
-  // id + name on the content div itself (not a separate empty tag) so mobile PDF
-  // readers get real bounding box coordinates and can navigate accurately.
-  return `<div id="q-${q.number}" name="q-${q.number}" style="
+  // FIX: Use a standalone zero-height <a id/name> anchor BEFORE the block div.
+  // Placing id/name directly on a <div> inside a <table> cell causes mobile PDF viewers
+  // (iOS Files, Google Drive Android) to compute wrong Y coordinates for the named
+  // destination. A standalone <a name> element is the universally-portable PDF anchor format.
+  return `<a id="q-${q.number}" name="q-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     break-inside:avoid;
     page-break-inside:avoid;
     border-bottom:0.5px solid #E0E0E0;
@@ -482,19 +484,23 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
   const label = path[path.length - 1];
   const parent = path.length > 1 ? path.slice(0, -1).join(' › ') : '';
 
-  // Prefix slugs get 1px x 1px hidden anchor spans inside the heading div so PDF generators
-  // and mobile PDF readers (Google Drive Mobile, iOS Files) see valid layout boxes.
+  // Emit standalone zero-height <a name> anchors for all PREFIX slugs (depth 1..N-1).
+  // The full-depth slug (d === path.length) is already on the <h2> itself — emitting
+  // it here too would create a duplicate id, which breaks anchor navigation in all
+  // mobile PDF viewers (iOS Files, Google Drive Android).
   const anchorSpans: string[] = [];
-  for (let d = 1; d <= path.length; d++) {
+  for (let d = 1; d < path.length; d++) {  // ← strict < (not <=)
     const prefixPath = path.slice(0, d);
     const prefixSlug = slugify(prefixPath);
     if (!emittedSlugs.has(prefixSlug)) {
       emittedSlugs.add(prefixSlug);
-      anchorSpans.push(`<span id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;"></span>`);
+      anchorSpans.push(`<a id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a>`);
     }
   }
+  // Register the full slug so it isn't re-emitted as a prefix span on deeper paths
+  emittedSlugs.add(fullSlug);
 
-  return `<h2 id="topic-${fullSlug}" name="topic-${fullSlug}" style="
+  return `${anchorSpans.join('')}<h2 id="topic-${fullSlug}" name="topic-${fullSlug}" style="
     break-after:avoid;page-break-after:avoid;
     background:${primaryColor}15;
     border-left:3px solid ${primaryColor};
@@ -502,7 +508,6 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
     position:relative;z-index:2;
     font-size:inherit;font-weight:normal;
   ">
-    ${anchorSpans.join('')}
     ${parent ? `<div style="font-size:6.5pt;color:#888;margin-bottom:1px;">${escHtml(parent)}</div>` : ''}
     <div style="font-weight:700;font-size:9.5pt;color:${primaryColor};">${escHtml(label)}</div>
   </h2>`;
@@ -511,8 +516,10 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
-  // id + name on content div so mobile PDF readers get real bounding-box coordinates
-  return `<div id="exp-${q.number}" name="exp-${q.number}" style="
+  // FIX: Same standalone <a name> anchor pattern as renderQuestionBlock.
+  // Separates the named destination from the block container so mobile PDF viewers
+  // resolve the correct Y coordinate regardless of table-cell layout offsets.
+  return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     break-inside:avoid;page-break-inside:avoid;
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
