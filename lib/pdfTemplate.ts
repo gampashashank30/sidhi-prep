@@ -721,7 +721,7 @@ export interface TemplateOptions {
   settings: PDFSettings;
   previewMode?: boolean;
   previewQuestionIndex?: number;
-  analyticsCharts?: { donut: boolean; pie: boolean; column: boolean };
+  analyticsCharts?: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean };
 }
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
@@ -807,7 +807,7 @@ function buildSvgArcPath(cx: number, cy: number, rOut: number, rIn: number, star
 
 function renderAnalyticsPage(
   questions: Question[],
-  charts: { donut: boolean; pie: boolean; column: boolean },
+  charts: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean },
   primaryColor: string,
 ): string {
   if (questions.length === 0) return '';
@@ -824,35 +824,39 @@ function renderAnalyticsPage(
   // Uses viewBox + width="100%" so it scales to the container, never overflows.
   function buildHorizontalBarSvg(): string {
     // Coordinate system: 500 units wide (will scale to container via width="100%")
-    const VW = 500;
-    const LABEL_H = 11;   // height for text label above bar
-    const BAR_H  = 14;    // bar height
-    const GAP    = 10;    // gap between rows
-    const PR     = 62;    // right margin for the count+% label
-    const PT     = 2;     // top padding
-    const barMaxW = VW - PR;
+    const VW       = 500;
+    const FONT_SZ  = 9;     // label font size (SVG units)
+    const LABEL_H  = 13;    // vertical space occupied by label text
+    const LBL_GAP  = 4;     // gap between bottom of label and top of bar
+    const BAR_H    = 14;    // bar height
+    const ROW_GAP  = 12;    // gap between rows
+    const PR       = 72;    // right margin for count+% label
+    const PT       = 4;     // top padding
+    const barMaxW  = VW - PR;
 
     const rows = slices.slice(0, 14); // at most 14 subjects
     const maxCount = Math.max(...rows.map(s => s.count), 1);
-    const ROW_H = LABEL_H + BAR_H + GAP;
+    const ROW_H  = LABEL_H + LBL_GAP + BAR_H + ROW_GAP;
     const totalH = PT + rows.length * ROW_H;
 
     let svg = '';
     rows.forEach((sl, i) => {
-      const rowY = PT + i * ROW_H;
-      const bW   = (sl.count / maxCount) * barMaxW;
+      const rowY    = PT + i * ROW_H;
+      const textY   = rowY + LABEL_H - 2;           // text baseline (near bottom of label area)
+      const barY    = rowY + LABEL_H + LBL_GAP;     // bar top (after label + gap)
+      const bW      = (sl.count / maxCount) * barMaxW;
       // Truncate label at 38 chars
-      const lbl  = sl.label.length > 38 ? sl.label.slice(0, 37) + '\u2026' : sl.label;
+      const lbl     = sl.label.length > 38 ? sl.label.slice(0, 37) + '\u2026' : sl.label;
 
-      // Label text above bar
-      svg += `<text x="0" y="${rowY + LABEL_H - 2}" font-size="9" font-weight="600" fill="#374151" font-family="Inter,sans-serif">${escHtml(lbl)}</text>`;
+      // Label text (clearly above bar with LBL_GAP breathing room)
+      svg += `<text x="0" y="${textY}" font-size="${FONT_SZ}" font-weight="600" fill="#374151" font-family="Inter,sans-serif">${escHtml(lbl)}</text>`;
       // Background track
-      svg += `<rect x="0" y="${rowY + LABEL_H}" width="${barMaxW}" height="${BAR_H}" rx="4" fill="#EEF0F8" -webkit-print-color-adjust="exact"/>`;
+      svg += `<rect x="0" y="${barY}" width="${barMaxW}" height="${BAR_H}" rx="4" fill="#EEF0F8" -webkit-print-color-adjust="exact"/>`;
       // Filled bar (minimum 4px so 0-count subjects still show)
       const fillW = Math.max(bW, sl.count > 0 ? 4 : 0);
-      svg += `<rect x="0" y="${rowY + LABEL_H}" width="${fillW}" height="${BAR_H}" rx="4" fill="${sl.color}" -webkit-print-color-adjust="exact"/>`;
-      // Count + % label to the right
-      svg += `<text x="${barMaxW + 5}" y="${rowY + LABEL_H + BAR_H / 2 + 1}" font-size="9" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif" dominant-baseline="middle">${sl.count} (${sl.pct}%)</text>`;
+      svg += `<rect x="0" y="${barY}" width="${fillW}" height="${BAR_H}" rx="4" fill="${sl.color}" -webkit-print-color-adjust="exact"/>`;
+      // Count + % label to the right, vertically centred on bar
+      svg += `<text x="${barMaxW + 5}" y="${barY + BAR_H / 2}" font-size="${FONT_SZ}" font-weight="700" fill="${sl.color}" font-family="Inter,sans-serif" dominant-baseline="middle">${sl.count} (${sl.pct}%)</text>`;
     });
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${totalH}" width="100%" height="auto" preserveAspectRatio="xMinYMin meet" style="display:block;overflow:visible;">${svg}</svg>`;
@@ -1066,10 +1070,11 @@ function renderAnalyticsPage(
       ${donutBlock}
 
       <!-- Detailed Breakdown by Topic -->
+      ${charts.breakdown ? `
       <div style="break-inside:avoid;page-break-inside:avoid;">
         <p style="font-size:8pt;font-weight:700;color:#475569;margin:0 0 6pt 0;text-transform:uppercase;letter-spacing:0.06em;">Detailed Breakdown by Topic</p>
         ${buildSubjectTable()}
-      </div>
+      </div>` : ''}
 
     </div>`;
 }
@@ -1113,7 +1118,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
   // 2b. Analytics page (if any charts enabled)
   const analyticsCharts = opts.analyticsCharts;
-  if (analyticsCharts && (analyticsCharts.donut || analyticsCharts.pie || analyticsCharts.column)) {
+  if (analyticsCharts && (analyticsCharts.donut || analyticsCharts.pie || analyticsCharts.column || analyticsCharts.breakdown)) {
     const analyticsHtml = renderAnalyticsPage(questions, analyticsCharts, primaryColor);
     if (analyticsHtml) sections.push(analyticsHtml);
   }

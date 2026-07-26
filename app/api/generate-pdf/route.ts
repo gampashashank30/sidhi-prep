@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       questions: Question[];
       coverSettings: CoverSettings | null;
       settings: PDFSettings;
-      analyticsCharts?: { donut: boolean; pie: boolean; column: boolean };
+      analyticsCharts?: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean };
     };
 
     const logoDataUrl = await getLogoDataUrl();

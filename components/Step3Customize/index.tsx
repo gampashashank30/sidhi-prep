@@ -243,10 +243,14 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
 
 // ── Analytics Section ─────────────────────────────────────────────────────────
 
-function AnalyticsSection({ questions, enabled, setEnabled }: {
+function AnalyticsSection({ questions, enabled, setEnabled, showDonut, setShowDonut, showBreakdown, setShowBreakdown }: {
   questions: Question[];
   enabled: boolean;
   setEnabled: (v: boolean) => void;
+  showDonut: boolean;
+  setShowDonut: (v: boolean) => void;
+  showBreakdown: boolean;
+  setShowBreakdown: (v: boolean) => void;
 }) {
   const nested = useMemo(() => buildNestedSlices(questions), [questions]);
   const total  = questions.length;
@@ -276,10 +280,57 @@ function AnalyticsSection({ questions, enabled, setEnabled }: {
             </div>
           ) : (
             <>
-              <div style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04))', borderRadius: '1rem', padding: '1.125rem 1rem 0.875rem', border: '1px solid rgba(99,102,241,0.14)' }}>
-                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1', marginBottom: '0.75rem', textAlign: 'center', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Topic Distribution</p>
-                <NestedDonutChart nested={nested} />
+              {/* Sub-toggles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(99,102,241,0.04)', borderRadius: '0.75rem', border: '1px solid rgba(99,102,241,0.1)' }}>
+                <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94A3B8', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>PDF Sections</p>
+                {/* Donut chart toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <button
+                    id="analytics-donut-toggle"
+                    role="switch"
+                    aria-checked={showDonut}
+                    onClick={() => setShowDonut(!showDonut)}
+                    style={{ position: 'relative', display: 'inline-flex', height: '1.25rem', width: '2.25rem', alignItems: 'center', borderRadius: '9999px', border: 'none', padding: 0, background: showDonut ? '#6366F1' : '#CBD5E1', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s ease' }}
+                  >
+                    <span style={{ position: 'absolute', height: '0.9rem', width: '0.9rem', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.22)', transform: showDonut ? 'translateX(1.05rem)' : 'translateX(0.175rem)', transition: 'transform 0.2s ease' }} />
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Donut Chart</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94A3B8', marginLeft: '0.35rem' }}>subject + subtopic rings</span>
+                  </div>
+                </div>
+                {/* Detailed breakdown toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <button
+                    id="analytics-breakdown-toggle"
+                    role="switch"
+                    aria-checked={showBreakdown}
+                    onClick={() => setShowBreakdown(!showBreakdown)}
+                    style={{ position: 'relative', display: 'inline-flex', height: '1.25rem', width: '2.25rem', alignItems: 'center', borderRadius: '9999px', border: 'none', padding: 0, background: showBreakdown ? '#6366F1' : '#CBD5E1', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s ease' }}
+                  >
+                    <span style={{ position: 'absolute', height: '0.9rem', width: '0.9rem', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.22)', transform: showBreakdown ? 'translateX(1.05rem)' : 'translateX(0.175rem)', transition: 'transform 0.2s ease' }} />
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Detailed Breakdown</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94A3B8', marginLeft: '0.35rem' }}>topic table by subject</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Donut preview (only shown if donut is on) */}
+              {showDonut && (
+                <div style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04))', borderRadius: '1rem', padding: '1.125rem 1rem 0.875rem', border: '1px solid rgba(99,102,241,0.14)', marginBottom: '0.75rem' }}>
+                  <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1', marginBottom: '0.75rem', textAlign: 'center', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Topic Distribution</p>
+                  <NestedDonutChart nested={nested} />
+                </div>
+              )}
+
+              {!showDonut && !showBreakdown && (
+                <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(148,163,184,0.07)', borderRadius: '0.75rem', border: '1.5px dashed rgba(148,163,184,0.3)' }}>
+                  <p style={{ fontSize: '0.78rem', color: '#94A3B8' }}>Enable at least one section above to include analytics in the PDF.</p>
+                </div>
+              )}
+
               <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(99,102,241,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{nested.subjects.length} subject{nested.subjects.length !== 1 ? 's' : ''}</span>
                 <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1' }}>{total} questions total</span>
@@ -291,7 +342,6 @@ function AnalyticsSection({ questions, enabled, setEnabled }: {
     </div>
   );
 }
-
 
 
 function CoverImageSection() {
@@ -746,6 +796,8 @@ export default function Step3Customize() {
 
   // Analytics state
   const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
+  const [showDonut, setShowDonut] = useState(true);
+  const [showBreakdown, setShowBreakdown] = useState(true);
 
 
   const update = useCallback(<K extends keyof PDFSettings>(key: K, value: PDFSettings[K]) => {
@@ -805,7 +857,7 @@ export default function Step3Customize() {
           coverSettings,
           settings: pdfSettings,
           analyticsCharts: analyticsEnabled
-            ? { donut: true, pie: false, column: false }
+            ? { donut: showDonut, pie: false, column: false, breakdown: showBreakdown }
             : undefined,
         }),
       });
@@ -870,6 +922,10 @@ export default function Step3Customize() {
             questions={selectedQuestions}
             enabled={analyticsEnabled}
             setEnabled={setAnalyticsEnabled}
+            showDonut={showDonut}
+            setShowDonut={setShowDonut}
+            showBreakdown={showBreakdown}
+            setShowBreakdown={setShowBreakdown}
           />
 
           {/* Cover image */}
