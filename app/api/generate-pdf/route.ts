@@ -28,12 +28,25 @@ async function getLogoDataUrl(): Promise<string | null> {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as {
+    // Support both JSON (fetch path) and form-encoded (mobile hidden-form path)
+    const contentType = req.headers.get('content-type') ?? '';
+    let body: {
       questions: Question[];
       coverSettings: CoverSettings | null;
       settings: PDFSettings;
       analyticsCharts?: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean };
     };
+
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      // Hidden form POST — payload arrives as the 'payload' field (JSON string)
+      const formData = await req.formData();
+      const raw = formData.get('payload');
+      if (typeof raw !== 'string') throw new Error('Missing payload field in form data');
+      body = JSON.parse(raw);
+    } else {
+      // Standard fetch/JSON path
+      body = await req.json();
+    }
 
     const logoDataUrl = await getLogoDataUrl();
 

@@ -844,51 +844,71 @@ export default function Step3Customize() {
   }, [pdfSettings.adImages, update]);
 
 
+  // Hidden form ref used for mobile-safe PDF download
+  const hiddenFormRef = useRef<HTMLFormElement>(null);
+  const hiddenPayloadRef = useRef<HTMLInputElement>(null);
+
+  /** Returns true on iOS Safari / Android Chrome where blob URL downloads fail */
+  function isMobileBrowser(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  }
+
   // ── PDF generation ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
-    setGenerating(true);
     setGenError(null);
-    try {
-      const res = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questions: selectedQuestions,
-          coverSettings,
-          settings: pdfSettings,
-          analyticsCharts: analyticsEnabled
-            ? { donut: showDonut, pie: false, column: false, breakdown: showBreakdown }
-            : undefined,
-        }),
-      });
-      if (!res.ok) {
-        let errorMsg = 'PDF generation failed';
-        try { const err = await res.json(); errorMsg = err.error ?? errorMsg; } catch {}
-        throw new Error(errorMsg);
+
+    const payload = JSON.stringify({
+      questions: selectedQuestions,
+      coverSettings,
+      settings: pdfSettings,
+      analyticsCharts: analyticsEnabled
+        ? { donut: showDonut, pie: false, column: false, breakdown: showBreakdown }
+        : undefined,
+    });
+
+    if (isMobileBrowser()) {
+      // ── Mobile path: hidden form POST ─────────────────────────────────────
+      // The browser submits the form directly to the API, which responds with
+      // Content-Disposition: attachment — the OS intercepts it as a native download.
+      // No blob URL, no window.open() — works on iOS Safari & Android Chrome.
+      if (!hiddenFormRef.current || !hiddenPayloadRef.current) return;
+      hiddenPayloadRef.current.value = payload;
+      hiddenFormRef.current.submit();
+    } else {
+      // ── Desktop path: fetch → anchor download ──────────────────────────────
+      setGenerating(true);
+      try {
+        const res = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+        if (!res.ok) {
+          let errorMsg = 'PDF generation failed';
+          try { const err = await res.json(); errorMsg = err.error ?? errorMsg; } catch {}
+          throw new Error(errorMsg);
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'siddhi-question-bank.pdf';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 2000);
+      } catch (err) {
+        setGenError(String(err instanceof Error ? err.message : err));
+      } finally {
+        setGenerating(false);
       }
-
-      const blob = await res.blob();
-      const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-      const url = URL.createObjectURL(pdfBlob);
-
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = 'siddhi-question-bank.pdf';
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 2000);
-
-    } catch (err) {
-      setGenError(String(err instanceof Error ? err.message : err));
-    } finally {
-      setGenerating(false);
     }
-  }, [selectedQuestions, coverSettings, pdfSettings, analyticsEnabled]);
+  }, [selectedQuestions, coverSettings, pdfSettings, analyticsEnabled, showDonut, showBreakdown]);
 
 
   const socialFields: Array<{ key: keyof PDFSettings['socialLinks']; label: string; placeholder: string }> = [
@@ -1268,6 +1288,23 @@ export default function Step3Customize() {
           />
         </div>
       </div>
+
+      {/*
+        Hidden form for mobile-safe PDF download.
+        On iOS Safari / Android Chrome, submitting a form with method="POST" to an endpoint
+        that returns Content-Disposition: attachment triggers a native OS download prompt
+        without any blob URL or window.open() — both of which are blocked on mobile.
+      */}
+      <form
+        ref={hiddenFormRef}
+        method="POST"
+        action="/api/generate-pdf"
+        encType="application/x-www-form-urlencoded"
+        style={{ display: 'none' }}
+        aria-hidden="true"
+      >
+        <input ref={hiddenPayloadRef} type="hidden" name="payload" defaultValue="" />
+      </form>
     </div>
   );
 }
