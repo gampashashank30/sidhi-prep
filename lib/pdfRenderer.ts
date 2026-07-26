@@ -99,14 +99,6 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
   const page = await browser.newPage();
 
   try {
-    // IMPORTANT: We use page.goto('file://...') instead of page.setContent()
-    // because setContent loads the page as 'about:blank', which means all href="#q-N"
-    // links resolve to "about:blank#q-N" (a different document) in the PDF.
-    // With a file:// URL the page has a real base URL, so "#q-N" resolves as a
-    // same-page fragment — Puppeteer correctly converts it to a named PDF destination.
-    //
-    // We cannot use data: URIs here because encodeURIComponent on a large HTML
-    // document can produce URLs exceeding Chrome's ~2MB URL limit.
     const os = require('os');
     const path = require('path');
     const fs = require('fs');
@@ -118,9 +110,68 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
         timeout: 45000,
       });
     } finally {
-      // Clean up temp file regardless of success/failure
       try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
     }
+
+    // ── Inject accurate page numbers into link text ────────────────────────────
+    // Strategy: A4 at 96 dpi = 1122.52 px tall. Puppeteer breaks pages at exactly
+    // this height. After the DOM is loaded, we measure each anchor's offsetTop,
+    // divide by pageHeightPx to get the 1-based page number, then patch the link
+    // text so it reads "View Explanation ↓ (p. 4)" etc.
+    // This makes PDFs usable on old Google Drive Android / any viewer that ignores
+    // named anchor navigation — students see the page number and jump there manually.
+    await page.evaluate(() => {
+      // A4 at 96 dpi: 297mm × (96/25.4) = 1122.52px
+      const PAGE_HEIGHT_PX = (297 / 25.4) * 96;
+
+      /** Returns the 1-based PDF page number for a DOM element */
+      function getPageNum(el: Element): number {
+        const rect = el.getBoundingClientRect();
+        const docTop = rect.top + window.scrollY;
+        return Math.floor(docTop / PAGE_HEIGHT_PX) + 1;
+      }
+
+      // Patch "View Explanation ↓" links: href="#exp-N"
+      document.querySelectorAll<HTMLAnchorElement>('a[href^="#exp-"]').forEach(function(link) {
+        const raw = link.getAttribute('href');
+        if (!raw) return;
+        const target = document.getElementById(raw.slice(1));
+        if (!target) return;
+        const pg = getPageNum(target);
+        if (link.textContent && !link.textContent.includes('(p.')) {
+          link.textContent = link.textContent.trim() + ' (p. ' + pg + ')';
+        }
+      });
+
+      // Patch "← Back to Question N" links: href="#q-N"
+      document.querySelectorAll<HTMLAnchorElement>('a[href^="#q-"]').forEach(function(link) {
+        const raw = link.getAttribute('href');
+        if (!raw) return;
+        const target = document.getElementById(raw.slice(1));
+        if (!target) return;
+        const pg = getPageNum(target);
+        if (link.textContent && !link.textContent.includes('(p.')) {
+          link.textContent = link.textContent.trim() + ' (p. ' + pg + ')';
+        }
+      });
+
+      // Patch TOC topic links: href="#topic-*"
+      document.querySelectorAll<HTMLAnchorElement>('a[href^="#topic-"]').forEach(function(link) {
+        const raw = link.getAttribute('href');
+        if (!raw) return;
+        const target = document.getElementById(raw.slice(1));
+        if (!target) return;
+        const pg = getPageNum(target);
+        const countSpan = link.querySelector('span:last-child');
+        if (countSpan && countSpan.textContent && !countSpan.textContent.includes('p.')) {
+          const pgSpan = document.createElement('span');
+          pgSpan.textContent = 'p.' + pg;
+          pgSpan.style.cssText = 'font-size:6.5pt;color:#94A3B8;margin-right:3pt;white-space:nowrap;';
+          const parent = countSpan.parentElement;
+          if (parent) parent.insertBefore(pgSpan, countSpan);
+        }
+      });
+    });
 
     const { primaryColor = '#1B5EA7', accentColor = '#14B89A' } = opts.settings;
 
@@ -132,10 +183,6 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
-      // Footer renders in the bottom-margin area. It has transparent background
-      // so fixed social-icon and border elements below shine through.
-      // Positioned at padding-right:32mm → horizontally in the dead zone between
-      // the corner-icon zone (right 0–18mm) and the centered social icons.
       footerTemplate: `
         <div style="
           width:100%;
@@ -167,7 +214,7 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
 
     return fixPdfDestinationsForMobile(Buffer.from(pdfBuffer));
   } finally {
-    await page.close(); // Only close the page, leave the browser running
+    await page.close();
   }
 }
 
