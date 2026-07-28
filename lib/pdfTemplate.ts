@@ -519,6 +519,10 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
   // FIX: Same standalone <a name> anchor pattern as renderQuestionBlock.
   // Separates the named destination from the block container so mobile PDF viewers
   // resolve the correct Y coordinate regardless of table-cell layout offsets.
+  const explanationHtml = q.explanation
+    ? `<div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>`
+    : `<div style="color:#94A3B8;font-size:8.5pt;font-style:italic;margin-bottom:6px;padding:6px 10px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:4px;">No explanation available</div>`;
+
   return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     break-inside:avoid;page-break-inside:avoid;
     border:1px solid #E0E5EA;border-radius:6px;
@@ -527,7 +531,7 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     position:relative;z-index:2;
   ">
     <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${displayNumber} — Explanation</div>
-    <div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>
+    ${explanationHtml}
     <div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
       <strong>Correct Answer:</strong> ${q.answer}) ${renderMath(stripMarkdown(q.options[q.answer]))}
     </div>
@@ -542,6 +546,8 @@ interface FlatEntry { path: string[]; slug: string; count: number; depth: number
 function buildFlatTopicList(questions: Question[]): FlatEntry[] {
   const map = new Map<string, { path: string[]; count: number }>();
   for (const q of questions) {
+    // Skip questions with no subject — they don't belong to any topic tree node
+    if (q.subjectPath.length === 0) continue;
     for (let d = 1; d <= q.subjectPath.length; d++) {
       const slice = q.subjectPath.slice(0, d);
       const key = slice.join('|||');
@@ -1145,7 +1151,10 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     const topicKey = q.subjectPath.join('|||');
 
     if (topicKey !== prevTopicKey) {
-      sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
+      // Only render a topic heading when this question has a non-empty subject path
+      if (q.subjectPath.length > 0) {
+        sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
+      }
       prevTopicKey = topicKey;
     }
 

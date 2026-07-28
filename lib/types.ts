@@ -9,7 +9,7 @@ export type Question = {
   answer: 'A' | 'B' | 'C' | 'D';
   explanation: string;
   subjectPath: string[]; // e.g. ["GS", "History", "Art and Culture", "Classical Music"]
-  difficulty: 'Easy' | 'Medium' | 'Hard';
+  difficulty: 'Easy' | 'Medium' | 'Hard' | null;
 
   // ── Passage / Direction group (optional) ────────────────────────────────────
   // Set when this question belongs to a "D.9-13)" or "Direction.1-5)" block.

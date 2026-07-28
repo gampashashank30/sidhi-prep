@@ -223,60 +223,55 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
         const next = paragraphs[i];
         if (RE_SUBJECT.test(next)) break;
         if (RE_QUESTION.test(next)) break;
+        if (RE_DIFFICULTY.test(next)) break;
         explanation += '\n' + next.trim();
         i++;
       }
 
       explanation = explanation.trim();
-
+      // Empty explanation is stored as '' — the PDF renderer will display
+      // "No explanation available" for questions where this is empty.
       if (!explanation) {
-        // Allow empty explanation — use a fallback so the question still appears in PDF
-        explanation = 'Refer to the standard solution for this question.';
         errors.push({
           questionNumber: qNumber,
-          message: `Q${qNumber}: Exp: field is empty — a placeholder explanation was used. Add content after "Exp:" in your document.`,
+          message: `Q${qNumber}: Exp: field is empty — "No explanation available" will be shown in the PDF.`,
         });
       }
     }
 
-    // ── Parse Subject: ────────────────────────────────────────────────────────
+    // ── Parse Subject: (optional — missing/empty subject keeps question in PDF without topic grouping)
     let subjectPath: string[] = [];
-    if (i >= paragraphs.length || !RE_SUBJECT.test(paragraphs[i])) {
-      const got = i < paragraphs.length ? paragraphs[i].substring(0, 40) : '(end of document)';
-      errors.push({
-        questionNumber: qNumber,
-        message: `Question ${qNumber} is missing "Subject:" line. Got: "${got}"`,
-      });
-      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-      continue;
-    } else {
+    if (i < paragraphs.length && RE_SUBJECT.test(paragraphs[i])) {
       const m = paragraphs[i].match(RE_SUBJECT)!;
       subjectPath = parseSubjectPath(m[1]);
       i++;
       if (subjectPath.length === 0) {
+        // Subject line present but empty/unparseable — soft warning, question still emitted
         errors.push({
           questionNumber: qNumber,
-          message: `Question ${qNumber} has an empty or unparseable Subject: value`,
+          message: `Q${qNumber}: Subject: field is empty — question will appear without a topic heading or badge.`,
         });
-        while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-        continue;
       }
-    }
-
-    // ── Parse Difficulty: ─────────────────────────────────────────────────────
-    let difficulty: 'Easy' | 'Medium' | 'Hard' | null = null;
-    if (i >= paragraphs.length || !RE_DIFFICULTY.test(paragraphs[i])) {
-      const got = i < paragraphs.length ? paragraphs[i].substring(0, 40) : '(end of document)';
+    } else {
+      // No Subject: line at all — soft warning, question still emitted without topic info
       errors.push({
         questionNumber: qNumber,
-        message: `Question ${qNumber} is missing a valid "Difficulty:" line (Easy/Medium/Hard). Got: "${got}"`,
+        message: `Q${qNumber}: Subject: line is missing — question will appear without a topic heading or badge.`,
       });
-      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-      continue;
-    } else {
+    }
+
+    // ── Parse Difficulty: (optional — missing difficulty keeps question in PDF without a badge)
+    let difficulty: 'Easy' | 'Medium' | 'Hard' | null = null;
+    if (i < paragraphs.length && RE_DIFFICULTY.test(paragraphs[i])) {
       const m = paragraphs[i].match(RE_DIFFICULTY)!;
       difficulty = normalizeDifficulty(m[1]);
       i++;
+    } else {
+      // No valid Difficulty: line — soft warning, question still emitted without difficulty badge
+      errors.push({
+        questionNumber: qNumber,
+        message: `Q${qNumber}: Difficulty: line is missing or invalid — question will appear without a difficulty badge.`,
+      });
     }
 
     // ── Check for unexpected content after this block ─────────────────────────

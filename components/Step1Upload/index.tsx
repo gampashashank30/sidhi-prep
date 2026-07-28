@@ -41,7 +41,7 @@ function getCombinedStats(result: ParseResult) {
   const qs = result.questions;
   const topicSet = new Set(qs.map((q) => q.subjectPath.join('>')));
   const diff = { Easy: 0, Medium: 0, Hard: 0 };
-  qs.forEach((q) => { diff[q.difficulty]++; });
+  qs.forEach((q) => { if (q.difficulty) diff[q.difficulty]++; });
   return { total: qs.length, topics: topicSet.size, diff };
 }
 
