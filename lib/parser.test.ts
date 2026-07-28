@@ -90,7 +90,7 @@ Difficulty:Medium`;
     expect(err!.message).toContain('Ans:');
   });
 
-  // ── TEST 3: Missing Exp line ────────────────────────────────────────────────
+  // ── TEST 3: Missing Exp line — question still emitted with soft warning ────────
   it('flags a question with a missing Exp: line as invalid', () => {
     const block = `Q1.Which gas do plants absorb?
 A.Oxygen
@@ -103,7 +103,11 @@ Difficulty:Easy`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
 
-    expect(questions).toHaveLength(0);
+    // Question is KEPT (not rejected) — Exp: is now fully optional
+    expect(questions).toHaveLength(1);
+    expect(questions[0].explanation).toBe('');
+    expect(questions[0].difficulty).toBe('Easy');
+    // Soft warning is still emitted
     expect(errors.length).toBeGreaterThan(0);
     const err = errors.find(e => e.questionNumber === 1);
     expect(err).toBeDefined();
@@ -540,6 +544,71 @@ Exp:`;
     expect(questions[0].difficulty).toBeNull();
     // Three soft warnings pushed (empty exp, missing subject, missing difficulty)
     expect(errors.length).toBeGreaterThanOrEqual(3);
+  });
+
+  // ── TEST 21: Real-world SSC GD 2026 format — Exp empty, Subject filled, Difficulty empty ──
+  it('parses real SSC GD 2026 document format (empty Exp + empty Difficulty, Subject present)', () => {
+    // This mirrors the exact format the user provided:
+    //   Exp:          ← heading present, no text
+    //   Subject:...   ← filled
+    //   Difficulty:   ← heading present, no text (not Easy/Medium/Hard)
+    const block = `Q1.Carbon is incorporated into living organisms through ______. (SSC GD 2026)
+A.Respiration
+B.Photosynthesis
+C.Fermentation
+D.Decomposition
+Ans:B
+Exp:
+Subject:GS > Science > Basic Science > Biology
+Difficulty:
+Q2.Kalbelia dance is inspired by the movements of which animal? (SSC GD 2026)
+A.Peacock
+B.Snake
+C.Horse
+D.Elephant
+Ans:B
+Exp:
+Subject:GS > History > Art and Culture > Folk Dance
+Difficulty:
+Q3.Which of the following shots are played in a tennis match? (SSC GD 2026)
+I. Forehand
+II. Backhand
+A.Only I
+B.Only II
+C.Both I and II
+D.Neither I nor II
+Ans:C
+Exp:
+Subject:GS > Static GK > Sports Rules
+Difficulty:`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+
+    // All 3 questions must be parsed — none rejected
+    expect(questions).toHaveLength(3);
+
+    // Q1 checks
+    expect(questions[0].answer).toBe('B');
+    expect(questions[0].explanation).toBe('');           // empty Exp stored as ''
+    expect(questions[0].subjectPath).toEqual(['Gs', 'Science', 'Basic Science', 'Biology']);
+    expect(questions[0].difficulty).toBeNull();          // empty Difficulty → null
+
+    // Q2 checks
+    expect(questions[1].answer).toBe('B');
+    expect(questions[1].subjectPath[0]).toBe('Gs');
+
+    // Q3 — roman numerals (I. II.) in stem must NOT be parsed as options
+    expect(questions[2].text).toContain('Forehand');     // I. Forehand in stem
+    expect(questions[2].text).toContain('Backhand');     // II. Backhand in stem
+    expect(questions[2].answer).toBe('C');
+    expect(questions[2].options.A).toBe('Only I');
+    expect(questions[2].options.C).toBe('Both I and II');
+
+    // Soft warnings exist (empty Exp × 3, empty Difficulty × 3) but no fatal errors
+    // Every question emits 2 warnings (empty exp + empty/missing difficulty)
+    expect(errors.length).toBeGreaterThanOrEqual(6);
+    // No question should be missing from the output
+    expect(questions.map(q => q.number)).toEqual([1, 2, 3]);
   });
 
 });

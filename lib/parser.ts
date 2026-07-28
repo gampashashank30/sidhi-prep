@@ -203,22 +203,15 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       i++;
     }
 
-    // ── Parse Exp: ────────────────────────────────────────────────────────────
+    // ── Parse Exp: (optional — absent or empty keeps question with explanation='') ─────────────
     let explanation = '';
-    if (i >= paragraphs.length || !RE_EXPLANATION.test(paragraphs[i])) {
-      const got = i < paragraphs.length ? paragraphs[i].substring(0, 40) : '(end of document)';
-      errors.push({
-        questionNumber: qNumber,
-        message: `Question ${qNumber} is missing "Exp:" line. Got: "${got}"`,
-      });
-      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-      continue;
-    } else {
+    if (i < paragraphs.length && RE_EXPLANATION.test(paragraphs[i])) {
+      // Exp: heading found — collect text
       const m = paragraphs[i].match(RE_EXPLANATION)!;
       explanation = m[1].trim();
       i++;
 
-      // Collect multi-line explanation text until Subject
+      // Collect multi-line explanation text until Subject / Difficulty / next Q
       while (i < paragraphs.length) {
         const next = paragraphs[i];
         if (RE_SUBJECT.test(next)) break;
@@ -229,15 +222,21 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       }
 
       explanation = explanation.trim();
-      // Empty explanation is stored as '' — the PDF renderer will display
-      // "No explanation available" for questions where this is empty.
+      // Empty explanation stored as '' — PDF renders "No explanation available"
       if (!explanation) {
         errors.push({
           questionNumber: qNumber,
           message: `Q${qNumber}: Exp: field is empty — "No explanation available" will be shown in the PDF.`,
         });
       }
+    } else {
+      // No Exp: heading at all — soft warning, question still emitted without explanation
+      errors.push({
+        questionNumber: qNumber,
+        message: `Q${qNumber}: Exp: line is missing — "No explanation available" will be shown in the PDF.`,
+      });
     }
+
 
     // ── Parse Subject: (optional — missing/empty subject keeps question in PDF without topic grouping)
     let subjectPath: string[] = [];
