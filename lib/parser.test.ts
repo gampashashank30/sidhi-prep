@@ -110,7 +110,7 @@ Difficulty:Easy`;
     expect(err!.message).toMatch(/Exp:|explanation/i);
   });
 
-  // ── TEST 4: Empty explanation ───────────────────────────────────────────────
+  // ── TEST 4: Empty explanation — question still emitted ───────────────────────
   it('flags a question with an empty Exp: field as invalid', () => {
     const block = `Q1.Test question.
 A.Option A
@@ -123,7 +123,9 @@ Subject:GS > Test
 Difficulty:Easy`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
-    // Empty exp after trim → should be flagged
+    // Empty exp — question is KEPT (not rejected) but a soft warning is emitted
+    expect(questions).toHaveLength(1);
+    expect(questions[0].explanation).toBe('');
     expect(errors.length).toBeGreaterThan(0);
     const err = errors.find(e => e.questionNumber === 1);
     expect(err).toBeDefined();
@@ -230,7 +232,7 @@ Difficulty:Medium`;
     expect(errors[0].message).toMatch(/no questions detected/i);
   });
 
-  // ── TEST 10: Invalid difficulty value ──────────────────────────────────────
+  // ── TEST 10: Invalid difficulty value — question still emitted with null difficulty ─────
   it('flags an invalid Difficulty value', () => {
     const block = `Q1.Test difficulty.
 A.Option A
@@ -243,6 +245,9 @@ Subject:GS > Test
 Difficulty:VeryHard`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
+    // Invalid difficulty — question is KEPT (not rejected) but a soft warning is emitted
+    expect(questions).toHaveLength(1);
+    expect(questions[0].difficulty).toBeNull();
     expect(errors.length).toBeGreaterThan(0);
     const err = errors.find(e => e.questionNumber === 1);
     expect(err!.message).toMatch(/Difficulty/i);
@@ -449,5 +454,92 @@ Difficulty:Easy`;
     }
   });
 
-});
+  // ── TEST 17: Empty Exp: heading — question parsed with empty explanation ─────
+  it('parses a question with Exp: heading present but no text (empty explanation)', () => {
+    const block = `Q1.What is the largest planet?
+A.Earth
+B.Saturn
+C.Jupiter
+D.Neptune
+Ans:C
+Exp:
+Subject:GS > Science > Astronomy
+Difficulty:Easy`;
 
+    const { questions, errors } = parseQuestions(makeParas(block));
+    // Question MUST be emitted even though explanation is empty
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBe('C');
+    expect(questions[0].explanation).toBe('');  // stored as empty string
+    // A soft warning is pushed but the question is not rejected
+    const warn = errors.find(e => e.questionNumber === 1);
+    expect(warn).toBeDefined();
+    expect(warn!.message).toMatch(/empty/i);
+  });
+
+  // ── TEST 18: Missing Subject — question parsed with empty subjectPath ────────
+  it('parses a question with no Subject: line (empty subjectPath)', () => {
+    const block = `Q1.What is photosynthesis?
+A.A chemical reaction
+B.A physical process
+C.A biological process converting light to energy
+D.None of the above
+Ans:C
+Exp:Photosynthesis is the biological process by which plants convert light energy into chemical energy.
+Difficulty:Medium`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+    // Question MUST be emitted even though Subject is missing
+    expect(questions).toHaveLength(1);
+    expect(questions[0].subjectPath).toEqual([]);
+    expect(questions[0].difficulty).toBe('Medium');
+    // A soft warning is pushed but the question is not rejected
+    const warn = errors.find(e => e.questionNumber === 1);
+    expect(warn).toBeDefined();
+    expect(warn!.message).toMatch(/Subject/i);
+  });
+
+  // ── TEST 19: Missing Difficulty — question parsed with null difficulty ────────
+  it('parses a question with no Difficulty: line (null difficulty)', () => {
+    const block = `Q1.Name the first Prime Minister of India.
+A.Rajendra Prasad
+B.Jawaharlal Nehru
+C.Lal Bahadur Shastri
+D.Indira Gandhi
+Ans:B
+Exp:Jawaharlal Nehru was the first Prime Minister of India.
+Subject:GS > History > Modern India`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+    // Question MUST be emitted even though Difficulty is missing
+    expect(questions).toHaveLength(1);
+    expect(questions[0].difficulty).toBeNull();
+    expect(questions[0].subjectPath).toEqual(['Gs', 'History', 'Modern India']);
+    // A soft warning is pushed but the question is not rejected
+    const warn = errors.find(e => e.questionNumber === 1);
+    expect(warn).toBeDefined();
+    expect(warn!.message).toMatch(/Difficulty/i);
+  });
+
+  // ── TEST 20: All three missing (Exp empty + no Subject + no Difficulty) ───────
+  it('parses a question with empty Exp, missing Subject, and missing Difficulty', () => {
+    const block = `Q1.Who wrote the Indian national anthem?
+A.Rabindranath Tagore
+B.Bankim Chandra Chatterjee
+C.Subramanya Bharati
+D.Sarojini Naidu
+Ans:A
+Exp:`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+    // Question MUST be emitted despite all three missing
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBe('A');
+    expect(questions[0].explanation).toBe('');
+    expect(questions[0].subjectPath).toEqual([]);
+    expect(questions[0].difficulty).toBeNull();
+    // Three soft warnings pushed (empty exp, missing subject, missing difficulty)
+    expect(errors.length).toBeGreaterThanOrEqual(3);
+  });
+
+});
