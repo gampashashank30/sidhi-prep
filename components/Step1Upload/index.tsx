@@ -203,7 +203,7 @@ export default function Step1Upload() {
   const anyLoading = fileEntries.some((e) => e.status === 'uploading' || e.status === 'pending');
   const doneEntries = fileEntries.filter((e) => e.status === 'done' && e.result);
   const canProceed = doneEntries.length > 0 && !anyLoading &&
-    doneEntries.every((e) => (e.result?.errors.length ?? 0) === 0);
+    doneEntries.some((e) => (e.result?.questions.length ?? 0) > 0);
 
   // Combined result for stats
   const combinedResult: ParseResult | null = doneEntries.length > 0
@@ -430,14 +430,49 @@ export default function Step1Upload() {
                 )}
               </div>
             </div>
+          ) : combinedResult.questions.length > 0 ? (
+            // ── Parsed OK but has soft warnings — yellow warning banner, still allow proceed
+            <div className="banner-warning" style={{
+              background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: '0.875rem',
+              padding: '0.875rem 1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="#D97706" style={{ flexShrink: 0, marginTop: '1px' }}>
+                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#92400E' }}>
+                  {combinedResult.questions.length} question{combinedResult.questions.length !== 1 ? 's' : ''} parsed successfully
+                  {' '}— {combinedResult.errors.length} warning{combinedResult.errors.length !== 1 ? 's' : ''} (these won\'t block your PDF)
+                </p>
+                {stats && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginTop: '0.5rem' }}>
+                    <StatPill dot="var(--primary)" label={`${stats.total} Questions`} />
+                    <StatPill dot="var(--accent)"  label={`${stats.topics} Topics`} />
+                  </div>
+                )}
+                <div style={{ marginTop: '0.625rem', maxHeight: '10rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingRight: '0.25rem' }}>
+                  {[...combinedResult.errors]
+                    .sort((a, b) => (a.questionNumber ?? -1) - (b.questionNumber ?? -1))
+                    .map((err, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '0.625rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.7)', borderRadius: '0.5rem', padding: '0.375rem 0.625rem', border: '1px solid #FDE68A' }}>
+                        <span style={{ fontWeight: 700, color: '#B45309', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {err.questionNumber != null ? `Q${err.questionNumber}` : 'Doc'}
+                        </span>
+                        <span style={{ color: '#78350F' }}>{err.message}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
           ) : (
+            // ── No questions parsed — true blocking error
             <div className="banner-error">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0, marginTop: '1px' }}>
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
               </svg>
               <div style={{ flex: 1 }}>
                 <p style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                  {combinedResult.errors.length} formatting error{combinedResult.errors.length > 1 ? 's' : ''} found — fix and re-upload affected files
+                  No questions could be parsed — check the document format and re-upload
                 </p>
                 <div style={{ marginTop: '0.75rem', maxHeight: '12rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.375rem', paddingRight: '0.25rem' }}>
                   {[...combinedResult.errors]
@@ -503,7 +538,7 @@ Subject: GS > Science > Solar System`}
                 {hasEntries
                   ? anyLoading
                     ? 'Wait for files to finish parsing…'
-                    : 'Fix any errors above, then try again'
+                    : 'No questions could be parsed — check the document format'
                   : 'Upload at least one valid .docx file'}
               </div>
             </div>
