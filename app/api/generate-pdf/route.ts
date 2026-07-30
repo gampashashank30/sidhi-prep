@@ -9,6 +9,15 @@ import { processLogoImage } from '@/lib/imageProcessor';
 export const runtime = 'nodejs';
 export const maxDuration = 120; // PDF generation can take time
 
+// Increase body size limit for large question sets with embedded images
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 // Pre-warm browser in the background when route module loads
 prewarmBrowser();
 

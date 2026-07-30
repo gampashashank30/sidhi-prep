@@ -867,30 +867,49 @@ export default function Step3Customize() {
         : undefined,
     });
 
+    // Warn early if payload is suspiciously large (> 40 MB)
+    const payloadBytes = new Blob([payload]).size;
+    if (payloadBytes > 40 * 1024 * 1024) {
+      setGenError(
+        `Payload too large (${(payloadBytes / 1024 / 1024).toFixed(1)} MB). ` +
+        'Try selecting fewer questions or removing large ad/cover images.'
+      );
+      return;
+    }
+
     if (isMobileBrowser()) {
       // ── Mobile path: hidden form POST ─────────────────────────────────────
-      // The browser submits the form directly to the API, which responds with
-      // Content-Disposition: attachment — the OS intercepts it as a native download.
-      // No blob URL, no window.open() — works on iOS Safari & Android Chrome.
       if (!hiddenFormRef.current || !hiddenPayloadRef.current) return;
       hiddenPayloadRef.current.value = payload;
       hiddenFormRef.current.submit();
     } else {
       // ── Desktop path: fetch → anchor download ──────────────────────────────
       setGenerating(true);
+      // Abort after 110 s so we show a clear timeout message before the
+      // server's 120 s maxDuration hard-kills the connection.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 110_000);
       try {
         const res = await fetch('/api/generate-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: payload,
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
+
         if (!res.ok) {
-          let errorMsg = 'PDF generation failed';
-          try { const err = await res.json(); errorMsg = err.error ?? errorMsg; } catch {}
+          let errorMsg = `PDF generation failed (HTTP ${res.status})`;
+          try {
+            const errBody = await res.json();
+            errorMsg = errBody.detail ?? errBody.error ?? errorMsg;
+          } catch { /* ignore parse error */ }
           throw new Error(errorMsg);
         }
 
         const blob = await res.blob();
+        if (blob.size === 0) throw new Error('Server returned an empty PDF — please try again.');
+
         const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -903,12 +922,21 @@ export default function Step3Customize() {
           document.body.removeChild(a);
         }, 2000);
       } catch (err) {
-        setGenError(String(err instanceof Error ? err.message : err));
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === 'AbortError') {
+          setGenError(
+            'PDF generation timed out after 110 seconds. ' +
+            'Try selecting fewer questions or splitting into multiple smaller exports.'
+          );
+        } else {
+          setGenError(String(err instanceof Error ? err.message : err));
+        }
       } finally {
         setGenerating(false);
       }
     }
   }, [selectedQuestions, coverSettings, pdfSettings, analyticsEnabled, showDonut, showBreakdown]);
+
 
 
   const socialFields: Array<{ key: keyof PDFSettings['socialLinks']; label: string; placeholder: string }> = [

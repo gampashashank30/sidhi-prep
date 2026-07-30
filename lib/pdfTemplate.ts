@@ -13,7 +13,7 @@
 // - Ads are full-height flex containers with forced page breaks around them
 
 import type { Question, PDFSettings, CoverSettings } from './types';
-import { unescapeMarkdown } from './text';
+import { unescapeMarkdown, normalizeMathEquations } from './text';
 
 import katex from 'katex';
 import {
@@ -27,32 +27,29 @@ import {
 
 // ─── HTML escape ──────────────────────────────────────────────────────────────
 
-export function escHtml(s: string): string {
-  if (!s) return '';
-  return String(s)
+function escHtml(str: string): string {
+  return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/\u2014/g, '&mdash;')
-    .replace(/\u2013/g, '&ndash;');
+    .replace(/'/g, '&#039;');
 }
 
 // ─── Math-aware renderer (SERVER-SIDE via KaTeX) ──────────────────────────────────────
-// Detects all LaTeX delimiter styles, normalises double-backslash escaping
-// (markdown converters output \\frac instead of \frac), and renders each
-// math fragment server-side with katex.renderToString() so Puppeteer gets
-// fully-rendered HTML with no browser-side JS required.
+// Detects all LaTeX delimiter styles, normalises double-backslash escaping,
+// cleans up Word OMML remnants, and renders each math fragment server-side with KaTeX.
 
 export function renderMath(raw: string): string {
   if (!raw) return '';
 
-  // Strip markdown bold/italic/heading remnants from the docx converter
-  const text = raw
-    .replace(/\*\*(.+?)\*\*/gs, '$1')
-    .replace(/\*(.+?)\*/gs,    '$1')
-    .replace(/^\s*#{1,6}\s*/gm, '');
+  // 1. Normalize Word OMML linear math markers (█, 〖, 〗, &@&)
+  const normalized = normalizeMathEquations(raw);
+
+  // 2. Strip markdown headings safely while preserving math delimiters
+  const text = normalized
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/\*\*(.+?)\*\*/gs, '$1');
 
   const out: string[] = [];
 
@@ -71,17 +68,15 @@ export function renderMath(raw: string): string {
       out.push(escHtml(unescapeMarkdown(text.slice(lastIdx, m.index))).replace(/\n/g, '<br/>'));
     }
 
-    const isBlock     = m[1] !== undefined || m[3] !== undefined;
-    // Unescape commands like \\frac to \frac, but LEAVE \\ line breaks intact!
+    const isBlock = m[1] !== undefined || m[3] !== undefined;
     let mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\(?=[a-zA-Z])/g, '\\');
 
-    // Force display style for inline math to prevent squished fractions
-    if (!isBlock) {
-      mathContent = '\\displaystyle ' + mathContent;
-    }
+    // DO NOT force \displaystyle on inline math!
+    // Standard inline math (displayMode: false) ensures formulas fit standard
+    // line-height and baseline metrics without overlapping adjacent English text lines.
 
     const katexOpts = {
-      throwOnError: true,
+      throwOnError: false,
       displayMode:  isBlock,
       output:       'html' as const,
       strict:       false,
@@ -1285,9 +1280,24 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     *, *::before, *::after { box-sizing:border-box; }
     body, h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, figcaption, blockquote, dl, dd { margin:0; padding:0; }
 
-    /* ── Math Rendering Fixes ── */
-    .katex { line-height: normal; }
-    .katex * { line-height: normal; }
+    /* ── Math Rendering & Baseline Fixes ── */
+    .katex {
+      font-size: 1.02em;
+      line-height: 1.2;
+      vertical-align: -0.06em;
+      margin: 0 1.5px;
+    }
+    .katex-display {
+      display: block;
+      margin: 0.5em 0 !important;
+      text-align: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .katex-display .katex {
+      display: inline-block;
+      margin: 0;
+    }
 
     /* ── Page setup: 0 margins, the table handles clearance ── */
     @page {

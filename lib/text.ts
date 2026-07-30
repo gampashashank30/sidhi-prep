@@ -68,3 +68,35 @@ export function normaliseTopicSegment(s: string): string {
     w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
   );
 }
+
+/**
+ * Clean up Word linear OMML equation remnants and normalize math content.
+ * Handles artifacts from Word equation editor (like █, 〖, 〗, &@&, @&, ■)
+ * that occur when converting .docx documents containing native equations.
+ */
+export function normalizeMathEquations(raw: string): string {
+  if (!raw) return '';
+
+  return (
+    raw
+      // 1. Remove Word OMML grouping brackets
+      .replace(/[〖〗]/g, '')
+
+      // 2. Clean up OMML linear block/matrix markers: █(...) or ■(...)
+      // e.g. █(eq1@&eq2@&eq3) -> eq1\neq2\neq3
+      .replace(/[█■]\(([\s\S]+?)\)/g, (_, body: string) => {
+        return body
+          .replace(/&@&|@&|&@/g, '\n')
+          .replace(/@/g, '\n')
+          .replace(/&/g, ' ');
+      })
+
+      // 3. Clean up loose OMML markers left outside brackets
+      .replace(/[█■]/g, '')
+      .replace(/&@&|@&|&@/g, ' ')
+
+      // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
+      .replace(/\\\\([a-zA-Z]+)/g, '\\$1')
+  );
+}
+
