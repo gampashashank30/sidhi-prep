@@ -70,45 +70,92 @@ export function normaliseTopicSegment(s: string): string {
 }
 
 /**
+ * Helper: Balance curly braces in a LaTeX fragment to prevent syntax errors.
+ */
+export function fixUnbalancedBraces(s: string): string {
+  if (!s) return s;
+
+  let open = 0;
+  let result = '';
+
+  for (let i = 0; i < s.length; i++) {
+    const char = s[i];
+    if (char === '{') {
+      open++;
+      result += char;
+    } else if (char === '}') {
+      if (open > 0) {
+        open--;
+        result += char;
+      }
+      // If open === 0, skip extra closing brace
+    } else {
+      result += char;
+    }
+  }
+
+  // Append any missing closing braces
+  while (open > 0) {
+    result += '}';
+    open--;
+  }
+
+  return result;
+}
+
+/**
  * Helper: Protect existing math blocks ($...$, $$...$$, \[...\], \(...\))
  * and auto-wrap bare LaTeX commands or plain-text math equations in $...$.
+ * Processes line-by-line to preserve multiline explanation layouts!
  */
 function autoWrapBareMath(text: string): string {
   if (!text) return text;
 
-  // 1. Protect existing delimited math blocks
-  const placeholders: string[] = [];
-  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
+  // Process line by line to ensure multiline equations stay separated
+  return text
+    .split('\n')
+    .map((line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return line;
 
-  let protectedText = text.replace(mathRe, (match) => {
-    placeholders.push(match);
-    return `___MATH_TOKEN_${placeholders.length - 1}___`;
-  });
+      // 1. Protect existing delimited math blocks
+      const placeholders: string[] = [];
+      const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
 
-  // 2. Wrap bare LaTeX commands (e.g. \sqrt{3}, \frac{1}{2}, \times, \div, \pm, \le, \ge, \neq, \therefore, \Delta)
-  const bareCmdRe = /\\(?:sqrt|frac|vec|overline|begin|end|alpha|beta|theta|pi|pm|infty|le|ge|neq|times|div|cdot|sum|int|therefore|because|Delta)(?:\{[^{}]*\}|\[[^[\]]*\])*/g;
+      let protectedText = line.replace(mathRe, (match) => {
+        placeholders.push(match);
+        return `___MATH_TOKEN_${placeholders.length - 1}___`;
+      });
 
-  protectedText = protectedText.replace(bareCmdRe, (match) => {
-    const trimmed = match.trim();
-    return `$${trimmed}$`;
-  });
+      // Un-escape stray brackets from docx converter: \[361-6pq\] -> [361-6pq]
+      protectedText = protectedText.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
 
-  // 3. Wrap standalone math equations (e.g. x^2 + 17x - 168 = 0, (x - 7)(x + 24) = 0, 84 = 1/2 * (17+x) * x)
-  const bareEqRe = /(?:^|\s)((?:[a-zA-Z0-9()]+(?:\^[0-9a-zA-Z]+|\/[0-9a-zA-Z]+)?\s*[-+*=:\/]\s*)+[a-zA-Z0-9().]+)(?=\s|$)/g;
+      // 2. Wrap bare LaTeX commands (e.g. \sqrt{3}, \frac{1}{2}, \times, \div, \pm, \le, \ge, \neq, \therefore, \Delta)
+      const bareCmdRe = /\\(?:sqrt|frac|vec|overline|begin|end|alpha|beta|theta|pi|pm|infty|le|ge|neq|times|div|cdot|sum|int|therefore|because|Delta)(?:\{[^{}]*\}|\[[^[\]]*\])*/g;
 
-  protectedText = protectedText.replace(bareEqRe, (match, eqGroup) => {
-    const trimmed = eqGroup.trim();
-    // Only wrap if it contains explicit math operators (^, =, +, -, \sqrt, etc.) and isn't plain words
-    if (/[\^=]/.test(trimmed) || (/\/|\*/.test(trimmed) && /\d/.test(trimmed))) {
-      return match.replace(trimmed, `$${trimmed}$`);
-    }
-    return match;
-  });
+      protectedText = protectedText.replace(bareCmdRe, (match) => {
+        const trimmed = fixUnbalancedBraces(match.trim());
+        return `$${trimmed}$`;
+      });
 
-  // 4. Restore protected math blocks
-  return protectedText.replace(/___MATH_TOKEN_(\d+)___/g, (_, idx) => {
-    return placeholders[Number(idx)];
-  });
+      // 3. Wrap standalone math equations (e.g. x^2 + 17x - 168 = 0, (x - 7)(x + 24) = 0, 84 = 1/2 * (17+x) * x)
+      const bareEqRe = /(?:^|\s)((?:[a-zA-Z0-9()]+(?:\^[0-9a-zA-Z]+|\/[0-9a-zA-Z]+)?\s*[-+*=:\/]\s*)+[a-zA-Z0-9().]+)(?=\s|$)/g;
+
+      protectedText = protectedText.replace(bareEqRe, (match, eqGroup) => {
+        const trimmed = eqGroup.trim();
+        // Only wrap if it contains explicit math operators (^, =, +, -, \sqrt, etc.) and isn't plain words
+        if (/[\^=]/.test(trimmed) || (/\/|\*/.test(trimmed) && /\d/.test(trimmed))) {
+          return match.replace(trimmed, `$${trimmed}$`);
+        }
+        return match;
+      });
+
+      // 4. Restore protected math blocks
+      return protectedText.replace(/___MATH_TOKEN_(\d+)___/g, (_, idx) => {
+        return placeholders[Number(idx)];
+      });
+    })
+    .join('\n');
 }
 
 /**
@@ -143,7 +190,7 @@ export function normalizeMathEquations(raw: string): string {
   // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
   s = s.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
 
-  // 5. Fix common corrupted LaTeX patterns from docx conversion (e.g., \sqrt{3}2} -> \sqrt{3} : \sqrt{2})
+  // 5. Fix common corrupted LaTeX patterns from docx conversion
   s = s.replace(/\\sqrt\{(\d+)\}(\d+)\}/g, '\\sqrt{$1} : \\sqrt{$2}');
   s = s.replace(/\\frac\{1\}\{x\}7\}\{5\}/g, '\\frac{1}{x} = -\\frac{7}{5}');
 
@@ -170,7 +217,10 @@ export function normalizeMathEquations(raw: string): string {
   s = s.replace(/∵/g, '\\because ');
   s = s.replace(/Δ/g, '\\Delta ');
 
-  // 7. Auto-wrap bare LaTeX commands & plain math expressions in $...$
+  // 7. Balance braces in any raw fractions/LaTeX commands
+  s = fixUnbalancedBraces(s);
+
+  // 8. Auto-wrap bare LaTeX commands & plain math expressions in $...$
   s = autoWrapBareMath(s);
 
   return s;

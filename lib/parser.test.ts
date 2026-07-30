@@ -656,6 +656,19 @@ describe('renderMath', () => {
     const html = renderMath(raw);
     expect(html).not.toContain('color: #cc0000');
   });
+
+  it('balances extra closing braces in docx fractions', () => {
+    const raw = '\\frac{ (x-y)^3 + (y-z)^3 }{ 6(x-y) }a^3+b^3+c^3 }{6abc }';
+    const html = renderMath(raw);
+    expect(html).not.toContain('font-family:monospace');
+    expect(html).toContain('katex');
+  });
+
+  it('preserves line breaks in multiline explanations', () => {
+    const raw = '(2p)^3 + q^3 = (2p + q)(4p^2 + q^2 - 2pq)\n8p^3 + q^3 = 19[361 - 6pq]';
+    const html = renderMath(raw);
+    expect(html).toContain('<br/>');
+  });
 });
 
 

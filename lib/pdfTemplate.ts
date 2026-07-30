@@ -13,7 +13,7 @@
 // - Ads are full-height flex containers with forced page breaks around them
 
 import type { Question, PDFSettings, CoverSettings } from './types';
-import { unescapeMarkdown, normalizeMathEquations } from './text';
+import { unescapeMarkdown, normalizeMathEquations, fixUnbalancedBraces } from './text';
 
 import katex from 'katex';
 import {
@@ -82,8 +82,8 @@ export function renderMath(raw: string): string {
       strict:       false,
     };
 
-    // Pre-clean math content: strip loose alignment ampersands
-    let mathContentCleaned = mathContent.replace(/(?:^|\s)&+/g, ' ').trim();
+    // Pre-clean math content: balance braces & strip loose alignment ampersands
+    let mathContentCleaned = fixUnbalancedBraces(mathContent.replace(/(?:^|\s)&+/g, ' ').trim());
 
     try {
       out.push(katex.renderToString(mathContentCleaned, katexOpts));
