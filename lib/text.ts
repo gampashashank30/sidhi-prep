@@ -70,33 +70,105 @@ export function normaliseTopicSegment(s: string): string {
 }
 
 /**
+ * Helper: Protect existing math blocks ($...$, $$...$$, \[...\], \(...\))
+ * and auto-wrap bare LaTeX commands or plain-text math equations in $...$.
+ */
+function autoWrapBareMath(text: string): string {
+  if (!text) return text;
+
+  // 1. Protect existing delimited math blocks
+  const placeholders: string[] = [];
+  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
+
+  let protectedText = text.replace(mathRe, (match) => {
+    placeholders.push(match);
+    return `___MATH_TOKEN_${placeholders.length - 1}___`;
+  });
+
+  // 2. Wrap bare LaTeX commands (e.g. \sqrt{3}, \frac{1}{2}, \times, \div, \pm, \le, \ge, \neq, \therefore, \Delta)
+  const bareCmdRe = /\\(?:sqrt|frac|vec|overline|begin|end|alpha|beta|theta|pi|pm|infty|le|ge|neq|times|div|cdot|sum|int|therefore|because|Delta)(?:\{[^{}]*\}|\[[^[\]]*\])*/g;
+
+  protectedText = protectedText.replace(bareCmdRe, (match) => {
+    const trimmed = match.trim();
+    return `$${trimmed}$`;
+  });
+
+  // 3. Wrap standalone math equations (e.g. x^2 + 17x - 168 = 0, (x - 7)(x + 24) = 0, 84 = 1/2 * (17+x) * x)
+  const bareEqRe = /(?:^|\s)((?:[a-zA-Z0-9()]+(?:\^[0-9a-zA-Z]+|\/[0-9a-zA-Z]+)?\s*[-+*=:\/]\s*)+[a-zA-Z0-9().]+)(?=\s|$)/g;
+
+  protectedText = protectedText.replace(bareEqRe, (match, eqGroup) => {
+    const trimmed = eqGroup.trim();
+    // Only wrap if it contains explicit math operators (^, =, +, -, \sqrt, etc.) and isn't plain words
+    if (/[\^=]/.test(trimmed) || (/\/|\*/.test(trimmed) && /\d/.test(trimmed))) {
+      return match.replace(trimmed, `$${trimmed}$`);
+    }
+    return match;
+  });
+
+  // 4. Restore protected math blocks
+  return protectedText.replace(/___MATH_TOKEN_(\d+)___/g, (_, idx) => {
+    return placeholders[Number(idx)];
+  });
+}
+
+/**
  * Clean up Word linear OMML equation remnants and normalize math content.
  * Handles artifacts from Word equation editor (like █, 〖, 〗, &@&, @&, ■)
- * that occur when converting .docx documents containing native equations.
+ * and auto-wraps bare LaTeX/Unicode equations in $...$.
  */
 export function normalizeMathEquations(raw: string): string {
   if (!raw) return '';
 
-  return (
-    raw
-      // 1. Remove Word OMML grouping brackets
-      .replace(/[〖〗]/g, '')
+  let s = raw;
 
-      // 2. Clean up OMML linear block/matrix markers: █(...) or ■(...)
-      // e.g. █(eq1@&eq2@&eq3) -> eq1\neq2\neq3
-      .replace(/[█■]\(([\s\S]+?)\)/g, (_, body: string) => {
-        return body
-          .replace(/&@&|@&|&@/g, '\n')
-          .replace(/@/g, '\n')
-          .replace(/&/g, ' ');
-      })
+  // 1. Remove Word OMML grouping brackets
+  s = s.replace(/[〖〗]/g, '');
 
-      // 3. Clean up loose OMML markers left outside brackets
-      .replace(/[█■]/g, '')
-      .replace(/&@&|@&|&@/g, ' ')
+  // 2. Clean up OMML linear block/matrix markers: █(...) or ■(...)
+  // e.g. █(eq1@&eq2@&eq3) -> eq1\neq2\neq3
+  s = s.replace(/[█■]\(([\s\S]+?)\)/g, (_, body: string) => {
+    return body
+      .replace(/&@&|@&|&@/g, '\n')
+      .replace(/@/g, '\n')
+      .replace(/&/g, ' ');
+  });
 
-      // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
-      .replace(/\\\\([a-zA-Z]+)/g, '\\$1')
-  );
+  // 3. Clean up loose OMML markers left outside brackets
+  s = s.replace(/[█■]/g, '');
+  s = s.replace(/&@&|@&|&@/g, ' ');
+
+  // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
+  s = s.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
+
+  // 5. Fix common corrupted LaTeX patterns from docx conversion (e.g., \sqrt{3}2} -> \sqrt{3} : \sqrt{2})
+  s = s.replace(/\\sqrt\{(\d+)\}(\d+)\}/g, '\\sqrt{$1} : \\sqrt{$2}');
+
+  // 6. Convert Unicode math symbols to LaTeX equivalents
+  // Superscripts ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁰ ⁺ ⁻ ⁿ
+  s = s.replace(/([a-zA-Z0-9()]+)²/g, '$1^2');
+  s = s.replace(/([a-zA-Z0-9()]+)³/g, '$1^3');
+  s = s.replace(/([a-zA-Z0-9()]+)⁴/g, '$1^4');
+  s = s.replace(/([a-zA-Z0-9()]+)⁵/g, '$1^5');
+  s = s.replace(/([a-zA-Z0-9()]+)ⁿ/g, '$1^n');
+
+  // Radicals √625 -> \sqrt{625}, √3 -> \sqrt{3}, √(16+2) -> \sqrt{16+2}
+  s = s.replace(/√\(([^\)]+)\)/g, '\\sqrt{$1}');
+  s = s.replace(/√([0-9a-zA-Z]+)/g, '\\sqrt{$1}');
+
+  // Math operators
+  s = s.replace(/×/g, '\\times ');
+  s = s.replace(/÷/g, '\\div ');
+  s = s.replace(/±/g, '\\pm ');
+  s = s.replace(/≤/g, '\\le ');
+  s = s.replace(/≥/g, '\\ge ');
+  s = s.replace(/≠/g, '\\neq ');
+  s = s.replace(/∴/g, '\\therefore ');
+  s = s.replace(/∵/g, '\\because ');
+  s = s.replace(/Δ/g, '\\Delta ');
+
+  // 7. Auto-wrap bare LaTeX commands & plain math expressions in $...$
+  s = autoWrapBareMath(s);
+
+  return s;
 }
 

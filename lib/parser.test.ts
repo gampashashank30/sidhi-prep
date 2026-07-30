@@ -3,6 +3,7 @@
 // Run with: npm test
 
 import { parseQuestions, extractParagraphs } from './parser';
+import { normalizeMathEquations } from './text';
 import type { Question } from './types';
 
 // ─── Test fixture: valid question from spec §2.1 ──────────────────────────────
@@ -612,3 +613,32 @@ Difficulty:`;
   });
 
 });
+
+describe('normalizeMathEquations', () => {
+  it('auto-wraps bare LaTeX commands like \\sqrt{3} : \\sqrt{2}', () => {
+    const raw = 'If the ratio of corresponding sides of two similar triangles is \\sqrt{3} : \\sqrt{2} then what is the ratio...';
+    const norm = normalizeMathEquations(raw);
+    expect(norm).toContain('$\\sqrt{3}$ : $\\sqrt{2}$');
+  });
+
+  it('fixes corrupted \\sqrt{3}2} from docx conversion', () => {
+    const raw = 'If the ratio of corresponding sides of two similar triangles is \\sqrt{3}2} then...';
+    const norm = normalizeMathEquations(raw);
+    expect(norm).toContain('$\\sqrt{3}$ : $\\sqrt{2}$');
+  });
+
+  it('converts Unicode exponents x² and hyp² into LaTeX x^2 and hyp^2', () => {
+    const raw = 'hyp² = (24)² + (7)² = √625';
+    const norm = normalizeMathEquations(raw);
+    expect(norm).toContain('hyp^2');
+    expect(norm).toContain('\\sqrt{625}');
+    expect(norm).toContain('$');
+  });
+
+  it('preserves existing $...$ math blocks without double wrapping', () => {
+    const raw = 'The value of $x^2 + y^2$ is 25.';
+    const norm = normalizeMathEquations(raw);
+    expect(norm).toBe('The value of $x^2 + y^2$ is 25.');
+  });
+});
+
