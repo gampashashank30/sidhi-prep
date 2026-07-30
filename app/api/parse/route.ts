@@ -5,13 +5,24 @@ import type { ParseResult } from '@/lib/types';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+import { parseDocxWithOmml } from '@/lib/ommlParser';
+
 async function parseOneFile(file: File): Promise<ParseResult> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const { docxToMarkdown } = await import('@aidalinfo/office-to-markdown');
-  const rawText = await docxToMarkdown(buffer);
-  const paragraphs = extractParagraphs(rawText);
+  let paragraphs: string[] = [];
+
+  try {
+    // Primary: Direct OMML XML extraction (converts Word equations directly into pristine LaTeX $...$)
+    paragraphs = await parseDocxWithOmml(buffer);
+  } catch (ommlErr) {
+    console.warn('Direct OMML parsing failed, falling back to office-to-markdown:', ommlErr);
+    const { docxToMarkdown } = await import('@aidalinfo/office-to-markdown');
+    const rawText = await docxToMarkdown(buffer);
+    paragraphs = extractParagraphs(rawText);
+  }
+
   return parseQuestions(paragraphs);
 }
 
