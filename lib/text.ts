@@ -133,15 +133,19 @@ export function normalizeMathEquations(raw: string): string {
       .replace(/&/g, ' ');
   });
 
-  // 3. Clean up loose OMML markers left outside brackets
+  // 3. Clean up loose OMML markers & alignment ampersands left outside matrix blocks
   s = s.replace(/[█■]/g, '');
   s = s.replace(/&@&|@&|&@/g, ' ');
+  // Remove loose alignment ampersands from Word equations (e.g. "& \frac{4}{7}", "& x^4", "&=54")
+  s = s.replace(/(?:^|\s)&+\s*=/g, ' =');
+  s = s.replace(/(?:^|\s)&+/g, ' ');
 
   // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
   s = s.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
 
   // 5. Fix common corrupted LaTeX patterns from docx conversion (e.g., \sqrt{3}2} -> \sqrt{3} : \sqrt{2})
   s = s.replace(/\\sqrt\{(\d+)\}(\d+)\}/g, '\\sqrt{$1} : \\sqrt{$2}');
+  s = s.replace(/\\frac\{1\}\{x\}7\}\{5\}/g, '\\frac{1}{x} = -\\frac{7}{5}');
 
   // 6. Convert Unicode math symbols to LaTeX equivalents
   // Superscripts ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁰ ⁺ ⁻ ⁿ

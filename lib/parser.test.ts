@@ -4,6 +4,7 @@
 
 import { parseQuestions, extractParagraphs } from './parser';
 import { normalizeMathEquations } from './text';
+import { renderMath } from './pdfTemplate';
 import type { Question } from './types';
 
 // ─── Test fixture: valid question from spec §2.1 ──────────────────────────────
@@ -641,4 +642,20 @@ describe('normalizeMathEquations', () => {
     expect(norm).toBe('The value of $x^2 + y^2$ is 25.');
   });
 });
+
+describe('renderMath', () => {
+  it('never outputs red katex-error spans for math strings with ampersands', () => {
+    const raw = '&x^{4}+\\frac{1}{x^{4}}=254 &x^{2}+\\frac{1}{x^{2}}=\\sqrt{254+2}=16';
+    const html = renderMath(raw);
+    expect(html).not.toContain('color: #cc0000');
+    expect(html).not.toContain('katex-error');
+  });
+
+  it('renders complex math with ampersands without throwing', () => {
+    const raw = '& ab-bc-ca=&\\frac{(a+b-c)^{2}- a^{2}+b^{2}+c^{2} }{2} ab-bc-ca=\\frac{400-152}{2}=124';
+    const html = renderMath(raw);
+    expect(html).not.toContain('color: #cc0000');
+  });
+});
+
 

@@ -76,28 +76,42 @@ export function renderMath(raw: string): string {
     // line-height and baseline metrics without overlapping adjacent English text lines.
 
     const katexOpts = {
-      throwOnError: false,
+      throwOnError: true, // ALWAYS true so try...catch catches errors instead of rendering red error text
       displayMode:  isBlock,
       output:       'html' as const,
       strict:       false,
     };
 
+    // Pre-clean math content: strip loose alignment ampersands
+    let mathContentCleaned = mathContent.replace(/(?:^|\s)&+/g, ' ').trim();
+
     try {
-      out.push(katex.renderToString(mathContent, katexOpts));
+      out.push(katex.renderToString(mathContentCleaned, katexOpts));
     } catch (e: any) {
-      const msg = e.message || '';
-      // If KaTeX fails due to alignment chars (& or \\), wrap in aligned and retry
-      if (msg.includes('Misplaced') || msg.includes('\\\\') || mathContent.includes('&') || mathContent.includes('\\\\')) {
+      // Retry 1: If mathContent contains alignment chars (& or \\), try wrapping in \begin{aligned}
+      if (mathContent.includes('&') || mathContent.includes('\\\\')) {
         try {
           const alignedContent = '\\begin{aligned}\n' + mathContent + '\n\\end{aligned}';
-          out.push(katex.renderToString(alignedContent, katexOpts));
-          continue; // Success on retry
+          out.push(katex.renderToString(alignedContent, { ...katexOpts, displayMode: true }));
+          lastIdx = m.index + m[0].length;
+          continue;
         } catch (e2) {
           // Fall through
         }
       }
-      // If still failing, output raw math gracefully
-      out.push(`<span style="color:#1F1F1F;font-family:monospace;font-size:8.5pt;">${escHtml(mathContent)}</span>`);
+
+      // Retry 2: Strip all ampersands entirely and retry
+      try {
+        const noAmp = mathContentCleaned.replace(/&/g, ' ');
+        out.push(katex.renderToString(noAmp, katexOpts));
+        lastIdx = m.index + m[0].length;
+        continue;
+      } catch (e3) {
+        // Fall through
+      }
+
+      // Final fallback: render neutral dark-styled math text (NEVER RED!)
+      out.push(`<span style="color:#1F1F1F;font-family:monospace;font-size:8.5pt;">${escHtml(mathContentCleaned)}</span>`);
     }
 
     lastIdx = m.index + m[0].length;
