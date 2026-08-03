@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
-import type { PDFSettings, AdImage, CoverSettings, Question } from '@/lib/types';
+import type { PDFSettings, CoverSettings, Question } from '@/lib/types';
+
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
 
 // ─── Superb 32-color palette — vibrant, fully distinct hues ──────────────────
@@ -799,49 +800,45 @@ export default function Step3Customize() {
   const [showDonut, setShowDonut] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(true);
 
-
   const update = useCallback(<K extends keyof PDFSettings>(key: K, value: PDFSettings[K]) => {
     updatePdfSettings({ [key]: value } as Partial<PDFSettings>);
   }, [updatePdfSettings]);
 
-  // ── Ad image upload — max 2 images, client-side compression ──────────────
-  const MAX_AD_IMAGES = 2;
-  const handleAdUpload = useCallback(async (files: FileList) => {
-    const remaining = MAX_AD_IMAGES - pdfSettings.adImages.length;
-    if (remaining <= 0) return;
+  // ── Ad PDF upload ─────────────────────────────────────────────────────
+  const [adPdfUploading, setAdPdfUploading] = useState(false);
+  const [adPdfError, setAdPdfError] = useState<string | null>(null);
+  const [adPdfMeta, setAdPdfMeta] = useState<{ fileName: string; pageCount: number; sizeKb: number } | null>(
+    pdfSettings.adPdf ? { fileName: 'Uploaded ad PDF', pageCount: 0, sizeKb: 0 } : null,
+  );
 
-    const compress = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const img = new Image();
-        const blobUrl = URL.createObjectURL(file);
-        img.onload = () => {
-          const MAX = 1400;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          const w = Math.round(img.width * scale);
-          const h = Math.round(img.height * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) { URL.revokeObjectURL(blobUrl); reject(new Error('canvas')); return; }
-          ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(blobUrl);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
-        };
-        img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('load')); };
-        img.src = blobUrl;
+  const handleAdPdfUpload = useCallback(async (file: File) => {
+    if (!file.name.endsWith('.pdf') && file.type !== 'application/pdf') {
+      setAdPdfError('Please upload a PDF file.');
+      return;
+    }
+    setAdPdfError(null);
+    setAdPdfUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload-ad-pdf', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed');
+      update('adPdf', {
+        base64: data.base64,
+        pageInterval: pdfSettings.adPdf?.pageInterval ?? 3,
       });
+      setAdPdfMeta({ fileName: data.fileName, pageCount: data.pageCount, sizeKb: data.sizeKb });
+    } catch (err) {
+      setAdPdfError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setAdPdfUploading(false);
+    }
+  }, [pdfSettings.adPdf?.pageInterval, update]);
 
-    const uploaded: AdImage[] = [];
-    for (const file of Array.from(files).slice(0, remaining)) {
-      try {
-        const dataUrl = await compress(file);
-        uploaded.push({ dataUrl });
-      } catch { /* skip bad files */ }
-    }
-    if (uploaded.length > 0) {
-      update('adImages', [...pdfSettings.adImages, ...uploaded]);
-    }
-  }, [pdfSettings.adImages, update]);
+
+
+
 
 
   // Hidden form ref used for mobile-safe PDF download
@@ -1190,80 +1187,103 @@ export default function Step3Customize() {
             </div>
           </SettingsSection>
 
-          {/* 5.6 Ads */}
-          <SettingsSection title="Advertisement Pages" icon={
+          {/* 5.6 Ads — PDF-based */}
+          <SettingsSection title="Advertisement PDF" icon={
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           }>
-            <ToggleRow id="toggle-ads" label="Insert Advertisement Pages" description="Both images appear together on each ad page" value={pdfSettings.adsEnabled} onChange={v => update('adsEnabled', v)} />
-            {pdfSettings.adsEnabled && (
-              <div className="mt-3 pl-4 border-l-2 border-gray-100 space-y-3">
-                <div>
-                  <label className="form-label" htmlFor="ad-interval">
-                    Insert ad after every{' '}
-                    <input
-                      id="ad-interval"
-                      type="number"
-                      min={1}
-                      value={pdfSettings.adIntervalQuestions}
-                      onChange={e => update('adIntervalQuestions', Math.max(1, parseInt(e.target.value) || 1))}
-                      className="form-input inline-block w-16 mx-1 text-center"
-                    />
-                    {' '}questions
-                  </label>
-                  <p className="text-xs text-gray-400 mt-1">e.g. 15 questions = ad appears after Q15, Q30, Q45…</p>
+            <p className="text-xs text-gray-500 mb-3">
+              Upload a PDF (with hyperlinks) to insert as advertisement pages at regular intervals.
+              Hyperlinks inside the ad PDF are fully preserved in the generated output.
+            </p>
+
+            {/* Upload zone */}
+            {!pdfSettings.adPdf ? (
+              <label
+                htmlFor="ad-pdf-upload"
+                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-all"
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleAdPdfUpload(f);
+                }}
+              >
+                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                {adPdfUploading ? (
+                  <span className="text-sm text-blue-600 font-medium">Uploading…</span>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold text-gray-600">Drop ad PDF here or click to browse</span>
+                    <span className="text-xs text-gray-400">PDF only · Max 10 MB · Hyperlinks preserved</span>
+                  </>
+                )}
+                <input
+                  id="ad-pdf-upload"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAdPdfUpload(f); e.target.value = ''; }}
+                />
+              </label>
+            ) : (
+              /* Uploaded PDF card */
+              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex-shrink-0 w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="form-label mb-0">Ad Images (max 2)</label>
-                    {pdfSettings.adImages.length >= 2 && (
-                      <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Max 2 reached</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mb-2">Both images are shown stacked on every ad page — each with its own link.</p>
-                  <div className="flex flex-col gap-3 mt-1">
-                    {pdfSettings.adImages.map((ad, i) => (
-                      <div key={i} className="flex items-start gap-3 p-2 border border-gray-100 bg-gray-50 rounded-lg">
-                        <div className="relative flex-shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={ad.dataUrl} alt={`Ad ${i+1}`} className="w-24 h-[54px] object-cover rounded border border-gray-200" />
-                          <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-gray-700 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{i + 1}</span>
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs font-semibold text-gray-600 block mb-1">Ad {i + 1} Link URL</label>
-                          <input
-                            type="url"
-                            placeholder="https://..."
-                            className="form-input text-xs h-7 px-2 w-full"
-                            value={ad.linkUrl || ''}
-                            onChange={e => {
-                              const newAds = [...pdfSettings.adImages];
-                              newAds[i] = { ...newAds[i], linkUrl: e.target.value };
-                              update('adImages', newAds);
-                            }}
-                          />
-                        </div>
-                        <button
-                          className="text-gray-400 hover:text-red-500 p-1"
-                          onClick={() => update('adImages', pdfSettings.adImages.filter((_, j) => j !== i))}
-                          title="Remove Ad"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    {pdfSettings.adImages.length < 2 && (
-                      <div>
-                        <label className={`btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2`}>
-                          <span className="text-lg leading-none">+</span> Add Ad Image {pdfSettings.adImages.length === 0 ? '(1 of 2)' : '(2 of 2)'}
-                          <input type="file" accept="image/*" multiple className="hidden"
-                            onChange={e => { if (e.target.files) handleAdUpload(e.target.files); e.target.value = ''; }} />
-                        </label>
-                      </div>
-                    )}
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{adPdfMeta?.fileName ?? 'advertisement.pdf'}</p>
+                  <p className="text-xs text-gray-500">
+                    {adPdfMeta?.pageCount ? `${adPdfMeta.pageCount} page${adPdfMeta.pageCount > 1 ? 's' : ''}` : ''}
+                    {adPdfMeta?.sizeKb ? ` · ${adPdfMeta.sizeKb} KB` : ''}
+                    <span className="ml-1 text-green-600 font-medium">· Hyperlinks preserved ✓</span>
+                  </p>
                 </div>
+                <button
+                  className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded"
+                  onClick={() => { update('adPdf', undefined); setAdPdfMeta(null); setAdPdfError(null); }}
+                  title="Remove ad PDF"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+
+            {adPdfError && (
+              <p className="text-xs text-red-600 mt-2 bg-red-50 px-3 py-1.5 rounded-lg">{adPdfError}</p>
+            )}
+
+            {/* Interval selector — only shown when PDF is uploaded */}
+            {pdfSettings.adPdf && (
+              <div className="mt-4">
+                <label className="form-label" htmlFor="ad-page-interval">
+                  Insert ad after every
+                </label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {[1, 2, 3, 4, 5, 7, 10].map(n => (
+                    <button
+                      key={n}
+                      id={n === 1 ? 'ad-page-interval' : undefined}
+                      onClick={() => update('adPdf', { ...pdfSettings.adPdf!, pageInterval: n })}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                        pdfSettings.adPdf?.pageInterval === n
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+                      }`}
+                    >
+                      {n} {n === 1 ? 'page' : 'pages'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  The full ad PDF is inserted after every {pdfSettings.adPdf.pageInterval} page{pdfSettings.adPdf.pageInterval > 1 ? 's' : ''} of content.
+                </p>
               </div>
             )}
           </SettingsSection>

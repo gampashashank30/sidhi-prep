@@ -851,88 +851,6 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
   `;
 }
 
-// ─── Ad block ─────────────────────────────────────────────────────────────────
-// Renders a single dedicated ad page containing ALL uploaded ad images (1 or 2).
-// - 1 image: full content-area height, centered
-// - 2 images: stacked vertically in equal halves, each independently clickable
-// Strict page-break-before:always + break-after:always ensures the ad never
-// merges with surrounding question/explanation content.
-
-function renderAdPage(adImages: import('./types').AdImage[], layout: Layout): string {
-  const pageH = layout.contentPageH;
-  const imgCount = Math.min(adImages.length, 2); // safety cap
-
-  const slots = adImages.slice(0, imgCount).map((ad) => {
-    const imgEl = `<img src="${ad.dataUrl}" style="
-      display:block;
-      max-width:100%;
-      max-height:100%;
-      width:auto;
-      height:auto;
-      object-fit:contain;
-      -webkit-print-color-adjust:exact;
-      print-color-adjust:exact;
-    " />`;
-
-    const inner = ad.linkUrl
-      ? `<a href="${escHtml(ad.linkUrl.startsWith('http') ? ad.linkUrl : 'https://' + ad.linkUrl)}" style="
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          width:100%;
-          height:100%;
-          text-decoration:none;
-        ">${imgEl}</a>`
-      : `<div style="
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          width:100%;
-          height:100%;
-        ">${imgEl}</div>`;
-
-    // Each slot takes equal share of the total ad page height
-    const slotH = Math.floor(pageH / imgCount);
-    return `<div style="
-      width:100%;
-      height:${slotH}mm;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      overflow:hidden;
-      box-sizing:border-box;
-      ${imgCount === 2 ? 'border-bottom:1px solid #E2E8F0;' : ''}
-    ">${inner}</div>`;
-  });
-
-  return `
-    <div style="
-      height:${pageH}mm;
-      break-before:page;
-      page-break-before:always;
-      break-after:page;
-      page-break-after:always;
-      break-inside:avoid;
-      page-break-inside:avoid;
-      display:flex;
-      flex-direction:column;
-      align-items:stretch;
-      justify-content:center;
-      background:#F8FAFC;
-      border:1px solid #E2E8F0;
-      border-radius:4px;
-      position:relative;
-      z-index:2;
-      overflow:hidden;
-      box-sizing:border-box;
-      -webkit-print-color-adjust:exact;
-      print-color-adjust:exact;
-    ">
-      ${slots.join('\n')}
-    </div>
-  `;
-}
-
 
 // ─── Main template builder ────────────────────────────────────────────────────
 
@@ -1370,20 +1288,6 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     }
 
     sections.push(renderQuestionBlock(q, settings, displayNumber));
-
-    // Ad insertion: after every N questions, inject a full ad page.
-    // (qi+1) is question count processed so far. We insert AFTER the Nth question
-    // so the ad always appears between complete question blocks — never mid-question.
-    if (
-      settings.adsEnabled &&
-      settings.adImages.length > 0 &&
-      (qi + 1) % settings.adIntervalQuestions === 0 &&
-      qi + 1 < questions.length // don't add a trailing ad after the very last question
-    ) {
-      sections.push('</div>'); // close current question section cleanly
-      sections.push(renderAdPage(settings.adImages, layout));
-      sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
-    }
   }
 
   sections.push(`</div>`); // close question section
@@ -1422,18 +1326,6 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
       }
 
       sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
-
-      // Same exact-count ad insertion in the explanations section
-      if (
-        settings.adsEnabled &&
-        settings.adImages.length > 0 &&
-        (qi + 1) % settings.adIntervalQuestions === 0 &&
-        qi + 1 < questions.length
-      ) {
-        sections.push('</div>'); // close current explanation section cleanly
-        sections.push(renderAdPage(settings.adImages, layout));
-        sections.push(`<div style="break-before:page;page-break-before:always;">`); // reopen
-      }
     }
 
     sections.push(`</div>`);

@@ -44,9 +44,7 @@ export const DEFAULT_PDF_SETTINGS = {
   showAnswer: true,
   includeExplanations: true,
   socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '', appStore: '', microsoftStore: '' },
-  adsEnabled: false,
-  adImages: [],
-  adIntervalQuestions: 15,
+  adPdf: undefined,
   primaryColor: DEFAULT_PRIMARY,
   accentColor: DEFAULT_ACCENT,
 };

@@ -81,20 +81,19 @@ export type PDFSettings = {
     microsoftStore: string;
   };
 
-  // 5.6 Ads
-  adsEnabled: boolean;
-  adImages: AdImage[];           // max 2 images; both shown together on each ad page
-  adIntervalQuestions: number;   // insert ad page after every N questions (default 15)
+  // 5.6 Ads — PDF-based advertisement insertion
+  // Upload a PDF (with hyperlinks) to be inserted at every N pages of content.
+  adPdf?: {
+    base64: string;      // The uploaded ad PDF as a base64 string
+    pageInterval: number; // Insert after every N content pages (1–10)
+  };
 
   // 5.7 Colors
   primaryColor: string;   // hex
   accentColor: string;    // hex
 };
 
-export type AdImage = {
-  dataUrl: string;    // base64 data URL (already compressed by client-side canvas)
-  linkUrl?: string;   // optional clickable URL (each image independently linked)
-};
+
 
 // ─── Cover image settings ─────────────────────────────────────────────────────
 

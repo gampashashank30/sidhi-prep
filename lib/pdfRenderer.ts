@@ -7,6 +7,7 @@ import puppeteer, { Browser } from 'puppeteer-core';
 import { existsSync } from 'fs';
 import type { TemplateOptions } from './pdfTemplate';
 import { buildHTMLTemplate } from './pdfTemplate';
+import { mergeAdPages } from './adPdfMerger';
 
 const PUPPETEER_ARGS = [
   '--no-sandbox',
@@ -165,7 +166,27 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       `,
     });
 
-    return fixPdfDestinationsForMobile(Buffer.from(pdfBuffer));
+    let finalBuffer = fixPdfDestinationsForMobile(Buffer.from(pdfBuffer));
+
+    // ── Ad PDF merging ────────────────────────────────────────────────────────
+    // If the user uploaded an ad PDF, insert its pages at every N content pages.
+    // This runs AFTER Puppeteer so the ad pages (and their hyperlinks) come
+    // directly from the original PDF — no re-rendering through HTML/CSS.
+    if (opts.settings.adPdf?.base64 && opts.settings.adPdf.pageInterval > 0) {
+      try {
+        const adBuffer = Buffer.from(opts.settings.adPdf.base64, 'base64');
+        finalBuffer = await mergeAdPages(
+          finalBuffer,
+          adBuffer,
+          opts.settings.adPdf.pageInterval,
+        );
+      } catch (adErr) {
+        // Never fail the whole PDF generation because of an ad merge error
+        console.error('[pdfRenderer] Ad PDF merge failed, skipping ads:', adErr);
+      }
+    }
+
+    return finalBuffer;
   } finally {
     await page.close(); // Only close the page, leave the browser running
   }
