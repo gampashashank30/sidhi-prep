@@ -5,6 +5,33 @@
 import type { Question, ValidationError, ParseResult } from './types';
 import { normaliseTopicSegment } from './text';
 
+// ─── Image token helpers ──────────────────────────────────────────────────────
+
+/** Regex to match [IMG:rIdXX] tokens emitted by ommlParser */
+const RE_IMG_TOKEN = /\[IMG:(rId\d+)\]/g;
+
+/**
+ * Extract all [IMG:rIdXX] tokens from a string and return their resolved base64 data URLs.
+ * If a token's rId is not in the imageMap (image failed to extract), it is silently skipped.
+ */
+function extractImages(text: string, imageMap: Record<string, string>): string[] {
+  const found: string[] = [];
+  let m: RegExpExecArray | null;
+  RE_IMG_TOKEN.lastIndex = 0;
+  while ((m = RE_IMG_TOKEN.exec(text)) !== null) {
+    const dataUrl = imageMap[m[1]];
+    if (dataUrl) found.push(dataUrl);
+  }
+  return found;
+}
+
+/**
+ * Strip all [IMG:rIdXX] tokens from a string, returning clean text.
+ */
+function stripImageTokens(text: string): string {
+  return text.replace(/\[IMG:rId\d+\]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 
 // ─── Regex patterns (from spec §2.2) ─────────────────────────────────────────
 
@@ -51,8 +78,12 @@ function normalizeDifficulty(raw: string): 'Easy' | 'Medium' | 'Hard' {
  * into validated Question objects.
  *
  * @param paragraphs  All non-empty strings from the document, in order.
+ * @param imageMap    Map of rId → base64 data URL from ommlParser. Pass {} if no images.
  */
-export function parseQuestions(paragraphs: string[]): ParseResult {
+export function parseQuestions(
+  paragraphs: string[],
+  imageMap: Record<string, string> = {},
+): ParseResult {
   const questions: Question[] = [];
   const errors: ValidationError[] = [];
 
@@ -121,6 +152,10 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       i++;
     }
 
+    // ── Extract images from question text ─────────────────────────────────────
+    const questionImages = extractImages(questionText, imageMap);
+    questionText = stripImageTokens(questionText);
+
     // ── Validate Q number sequence ───────────────────────────────────────────
     if (qNumber !== expectedNumber) {
       errors.push({
@@ -137,6 +172,7 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       ['A', RE_OPT_A], ['B', RE_OPT_B], ['C', RE_OPT_C], ['D', RE_OPT_D],
     ];
     const options: Partial<{ A: string; B: string; C: string; D: string }> = {};
+    const optionImages: Partial<{ A: string[]; B: string[]; C: string[]; D: string[] }> = {};
     let blockInvalid = false;
     let blockInvalidReason = '';
 
@@ -177,7 +213,9 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
         i++;
       }
 
-      options[letter] = optionText;
+      // Extract any images from this option text
+      optionImages[letter] = extractImages(optionText, imageMap);
+      options[letter] = stripImageTokens(optionText);
     }
 
     if (blockInvalid) {
@@ -205,6 +243,7 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
 
     // ── Parse Exp: (optional — absent or empty keeps question with explanation='') ─────────────
     let explanation = '';
+    let explanationImages: string[] = [];
     if (i < paragraphs.length && RE_EXPLANATION.test(paragraphs[i])) {
       // Exp: heading found — collect text
       const m = paragraphs[i].match(RE_EXPLANATION)!;
@@ -221,6 +260,9 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
         i++;
       }
 
+      // Extract images from explanation
+      explanationImages = extractImages(explanation, imageMap);
+      explanation = stripImageTokens(explanation);
       explanation = explanation.trim();
       // Empty explanation stored as '' — PDF renders "No explanation available"
       if (!explanation) {
@@ -307,6 +349,17 @@ export function parseQuestions(paragraphs: string[]): ParseResult {
       explanation,
       subjectPath,
       difficulty: difficulty!,
+      // Image fields — only set when present to keep JSON lean
+      ...(questionImages.length > 0 && { images: questionImages }),
+      ...(Object.values(optionImages).some(imgs => imgs && imgs.length > 0) && {
+        optionImages: {
+          ...(optionImages.A?.length && { A: optionImages.A[0] }),
+          ...(optionImages.B?.length && { B: optionImages.B[0] }),
+          ...(optionImages.C?.length && { C: optionImages.C[0] }),
+          ...(optionImages.D?.length && { D: optionImages.D[0] }),
+        },
+      }),
+      ...(explanationImages.length > 0 && { explanationImages }),
     };
 
     // Attach passage/direction group fields if this Q falls in the active range

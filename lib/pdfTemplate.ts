@@ -415,27 +415,89 @@ function renderPassageBlock(passageText: string, groupRange: [number, number], p
   </div>`;
 }
 
+// ─── Inline image renderer ─────────────────────────────────────────────────────
+
+/**
+ * Renders one or more base64 data URL images as centered, break-safe <img> blocks.
+ * Works universally for any DOCX — question body images, option images, explanation images.
+ *
+ * @param dataUrls  Array of base64 data URLs
+ * @param maxWidthMm  Max display width in mm (default 88mm — fits A4 content area)
+ * @param compact     When true, uses smaller vertical margins (for options grid)
+ */
+function renderInlineImages(
+  dataUrls: string[] | undefined,
+  maxWidthMm = 88,
+  compact = false,
+): string {
+  if (!dataUrls || dataUrls.length === 0) return '';
+
+  const margin = compact ? '3pt 0 2pt 0' : '5pt 0 4pt 0';
+
+  return dataUrls.map(src => `
+    <div style="
+      text-align:center;
+      margin:${margin};
+      break-inside:avoid;
+      page-break-inside:avoid;
+      line-height:0;
+    ">
+      <img src="${src}" style="
+        max-width:${maxWidthMm}mm;
+        max-height:60mm;
+        width:auto;
+        height:auto;
+        object-fit:contain;
+        display:inline-block;
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
+      " />
+    </div>
+  `).join('');
+}
+
 // ─── Question block ───────────────────────────────────────────────────────────
 
 function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: number): string {
   const { primaryColor, accentColor } = settings;
+
+  // Determine layout: use horizontal (flex-wrap) only when ALL options are text-only AND short
+  const hasAnyOptionImage = q.optionImages &&
+    (q.optionImages.A || q.optionImages.B || q.optionImages.C || q.optionImages.D);
   const maxOptLen = Math.max(...Object.values(q.options).map(o => o.length));
-  const useHorizontal = maxOptLen <= 40;
+  const useHorizontal = !hasAnyOptionImage && maxOptLen <= 40;
+
+  // Build each option — text + optional image
+  function buildOption(l: 'A' | 'B' | 'C' | 'D'): { text: string, img: string } {
+    const optText = renderMath(stripMarkdown(q.options[l]));
+    const optImg = renderInlineImages(
+      q.optionImages?.[l] ? [q.optionImages[l]!] : undefined,
+      /* maxWidthMm */ 42,
+      /* compact */ true,
+    );
+    return { text: optText, img: optImg };
+  }
 
   const optionsHtml = useHorizontal
     ? `<div style="display:flex;flex-wrap:wrap;gap:3px 18px;margin:4px 0 5px 0;">
-        ${(['A','B','C','D'] as const).map(l =>
-          `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
+        ${(['A','B','C','D'] as const).map(l => {
+          const { text, img } = buildOption(l);
+          return `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
             <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;">${l})</strong>
-            <span style="font-size:8.5pt;">${renderMath(stripMarkdown(q.options[l]))}</span>
-           </span>`).join('')}
+            <span style="font-size:8.5pt;">${text}${img}</span>
+           </span>`;
+        }).join('')}
        </div>`
     : `<div style="margin:4px 0 5px 0;">
-        ${(['A','B','C','D'] as const).map(l =>
-          `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:2px;">
+        ${(['A','B','C','D'] as const).map(l => {
+          const { text, img } = buildOption(l);
+          // If option has an image and no/little text, make it more compact
+          const hasImg = !!(q.optionImages?.[l]);
+          return `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:${hasImg ? '4px' : '2px'};break-inside:avoid;page-break-inside:avoid;">
             <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;min-width:14px;">${l})</strong>
-            <span style="font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.options[l]))}</span>
-           </div>`).join('')}
+            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${text}${img}</span>
+           </div>`;
+        }).join('')}
        </div>`;
 
   const answerBadge = settings.showAnswer
@@ -457,13 +519,13 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
 
   // The explanation link — only shown when explanations are included
   const expLink = settings.includeExplanations
-    ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation ↓</a>`
+    ? `<a href="#exp-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;white-space:nowrap;">View Explanation \u2193</a>`
     : '';
 
+  // Question body images (rendered below the question text, before options)
+  const questionBodyImages = renderInlineImages(q.images);
+
   // FIX: Use a standalone zero-height <a id/name> anchor BEFORE the block div.
-  // Placing id/name directly on a <div> inside a <table> cell causes mobile PDF viewers
-  // (iOS Files, Google Drive Android) to compute wrong Y coordinates for the named
-  // destination. A standalone <a name> element is the universally-portable PDF anchor format.
   return `<a id="q-${q.number}" name="q-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     break-inside:avoid;
     page-break-inside:avoid;
@@ -478,6 +540,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
       </div>
       ${answerBadge}
     </div>
+    ${questionBodyImages}
     ${optionsHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:4px;margin-top:2px;">
       ${badgeRow || '<span></span>'}
@@ -526,8 +589,6 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
   // FIX: Same standalone <a name> anchor pattern as renderQuestionBlock.
-  // Separates the named destination from the block container so mobile PDF viewers
-  // resolve the correct Y coordinate regardless of table-cell layout offsets.
   const explanationHtml = q.explanation
     ? `<div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>`
     : `<div style="color:#94A3B8;font-size:8.5pt;font-style:italic;margin-bottom:6px;padding:6px 10px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:4px;">No explanation available</div>`;

@@ -12,19 +12,28 @@ async function parseOneFile(file: File): Promise<ParseResult> {
   const buffer = Buffer.from(arrayBuffer);
 
   let paragraphs: string[] = [];
+  let imageMap: Record<string, string> = {};
 
   try {
-    // Primary: Direct OMML XML extraction (converts Word equations directly into pristine LaTeX $...$)
-    paragraphs = await parseDocxWithOmml(buffer);
+    // Primary: Direct OMML XML extraction
+    // Returns { paragraphs, imageMap } — paragraphs contain [IMG:rIdXX] tokens,
+    // imageMap resolves those tokens to base64 data URLs.
+    const result = await parseDocxWithOmml(buffer);
+    paragraphs = result.paragraphs;
+    imageMap   = result.imageMap;
   } catch (ommlErr) {
     console.warn('Direct OMML parsing failed, falling back to office-to-markdown:', ommlErr);
     const { docxToMarkdown } = await import('@aidalinfo/office-to-markdown');
     const rawText = await docxToMarkdown(buffer);
     paragraphs = extractParagraphs(rawText);
+    // imageMap stays {} — no image support in fallback mode
   }
 
-  return parseQuestions(paragraphs);
+  // Pass imageMap to parser so [IMG:rIdXX] tokens are resolved into base64 data URLs
+  // and stored in question.images / optionImages / explanationImages
+  return parseQuestions(paragraphs, imageMap);
 }
+
 
 export async function POST(req: NextRequest) {
   try {

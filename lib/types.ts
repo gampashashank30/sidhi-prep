@@ -11,6 +11,13 @@ export type Question = {
   subjectPath: string[]; // e.g. ["GS", "History", "Art and Culture", "Classical Music"]
   difficulty: 'Easy' | 'Medium' | 'Hard' | null;
 
+  // ── Embedded images (universal — any DOCX with inline images) ───────────────
+  // Each entry is a base64 data URL: "data:image/png;base64,..."
+  // Populated by the OMML parser for any uploaded .docx, not just one specific file.
+  images?: string[];                                          // Images in question body
+  optionImages?: { A?: string; B?: string; C?: string; D?: string }; // Per-option images
+  explanationImages?: string[];                               // Images in explanation
+
   // ── Passage / Direction group (optional) ────────────────────────────────────
   // Set when this question belongs to a "D.9-13)" or "Direction.1-5)" block.
   passageText?: string;            // Shared passage text for the group

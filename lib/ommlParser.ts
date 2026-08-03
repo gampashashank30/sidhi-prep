@@ -1,14 +1,78 @@
-// lib/ommlParser.ts — Direct Word OMML XML to LaTeX Parser
+// lib/ommlParser.ts — Universal DOCX Parser: Text + Inline Images
 //
-// Reads word/document.xml directly from a .docx buffer and transforms native
-// Word Equation Editor structures (<m:oMath> and <m:oMathPara>) into pristine
-// LaTeX $...$ and $$...$$ math blocks.
+// Reads word/document.xml directly from a .docx buffer and:
+// 1. Transforms native Word Equation Editor structures (OMML) into LaTeX $...$
+// 2. Extracts ALL embedded images (from word/media/) as base64 data URLs
+// 3. Emits [IMG:rIdXX] placeholder tokens inline within paragraph text, preserving
+//    the exact positional relationship between text and images.
+//
+// This is universal — works for any .docx file that embeds images via <w:drawing>.
 
 import JSZip from 'jszip';
 import { DOMParser } from '@xmldom/xmldom';
 
+// ─── Return type ──────────────────────────────────────────────────────────────
+
+export interface DocxParseResult {
+  /** Paragraph strings with [IMG:rIdXX] tokens embedded where images appear */
+  paragraphs: string[];
+  /**
+   * Map of relationship ID → base64 data URL.
+   * e.g. { "rId5": "data:image/png;base64,iVBO..." }
+   * Works for any image type: png, jpeg, gif, emf, wmf, svg
+   */
+  imageMap: Record<string, string>;
+}
+
+// ─── MIME type detection ──────────────────────────────────────────────────────
+
+function getMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    png:  'image/png',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif:  'image/gif',
+    bmp:  'image/bmp',
+    webp: 'image/webp',
+    svg:  'image/svg+xml',
+    tiff: 'image/tiff',
+    tif:  'image/tiff',
+    emf:  'image/emf',   // Windows Enhanced Metafile — treated as opaque blob
+    wmf:  'image/wmf',
+  };
+  return map[ext] ?? 'image/png';
+}
+
+// ─── Text sanitizer ──────────────────────────────────────────────────────────
+
 /**
- * Recursively convert an OMML XML node (<m:oMath>, <m:f>, <m:rad>, <m:sSup>, etc.) into a LaTeX string.
+ * Normalize text extracted from Word XML runs.
+ * Word uses special Unicode characters that appear as garbage in plain text output:
+ * - \u00A0 (non-breaking space) → regular space
+ * - \u00AD (soft hyphen) → removed
+ * - \u200B–\u200D (zero-width chars) → removed
+ * - \uFEFF (BOM) → removed
+ * - \uFFFD (replacement char) → removed
+ * - ASCII control chars → removed
+ */
+function sanitizeText(text: string): string {
+  return text
+    .replace(/\u00A0/g, ' ')   // non-breaking space → regular space
+    .replace(/\u00AD/g, '')    // soft hyphen → remove
+    .replace(/\u200B/g, '')    // zero-width space → remove
+    .replace(/\u200C/g, '')    // zero-width non-joiner → remove
+    .replace(/\u200D/g, '')    // zero-width joiner → remove
+    .replace(/\uFEFF/g, '')    // BOM / zero-width no-break space → remove
+    .replace(/\uFFFD/g, '')    // replacement character → remove
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // control chars → remove
+}
+
+// ─── OMML → LaTeX converter ───────────────────────────────────────────────────
+
+
+/**
+ * Recursively convert an OMML XML node (m:oMath, m:f, m:rad, m:sSup, etc.) into a LaTeX string.
  */
 function ommlElementToLatex(node: Node): string {
   if (!node) return '';
@@ -48,7 +112,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'rad': {
-      // Radical / Square root: <m:rad><m:deg>...</m:deg><m:e>...</m:e></m:rad>
+      // Radical / Square root
       let deg = '';
       let elem = '';
       for (let i = 0; i < node.childNodes.length; i++) {
@@ -64,7 +128,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'sSup': {
-      // Superscript: <m:sSup><m:e>...</m:e><m:sup>...</m:sup></m:sSup>
+      // Superscript
       let base = '';
       let sup = '';
       for (let i = 0; i < node.childNodes.length; i++) {
@@ -77,7 +141,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'sSub': {
-      // Subscript: <m:sSub><m:e>...</m:e><m:sub>...</m:sub></m:sSub>
+      // Subscript
       let base = '';
       let sub = '';
       for (let i = 0; i < node.childNodes.length; i++) {
@@ -90,7 +154,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'sSubSup': {
-      // Subscript + Superscript: <m:sSubSup><m:e>...</m:e><m:sub>...</m:sub><m:sup>...</m:sup></m:sSubSup>
+      // Subscript + Superscript
       let base = '';
       let sub = '';
       let sup = '';
@@ -105,7 +169,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'd': {
-      // Delimiter / Parentheses: <m:d><m:begChr m:val="("/><m:endChr m:val=")"/><m:e>...</m:e></m:d>
+      // Delimiter / Parentheses
       let beg = '(';
       let end = ')';
       let elem = '';
@@ -130,7 +194,7 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'm': {
-      // Matrix / Equation Array: <m:m><m:mr><m:e>...</m:e></m:mr></m:m>
+      // Matrix / Equation Array
       const rows: string[] = [];
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes[i];
@@ -203,13 +267,138 @@ function ommlElementToLatex(node: Node): string {
   }
 }
 
+// ─── Relationship map builder ─────────────────────────────────────────────────
+
+/**
+ * Parse word/_rels/document.xml.rels and return a map of
+ * relationship ID → target filename (relative to word/).
+ * e.g. { "rId5": "media/image1.png" }
+ */
+async function buildRelationshipMap(zip: JSZip): Promise<Record<string, string>> {
+  const relsMap: Record<string, string> = {};
+
+  // Try both common locations for the document relationships file
+  const relsPaths = [
+    'word/_rels/document.xml.rels',
+    '_rels/.rels',
+  ];
+
+  for (const relsPath of relsPaths) {
+    const relsFile = zip.file(relsPath);
+    if (!relsFile) continue;
+
+    const relsXml = await relsFile.async('string');
+    const parser = new DOMParser();
+    const relsDoc = parser.parseFromString(relsXml, 'text/xml');
+
+    const relationships = relsDoc.getElementsByTagName('Relationship');
+    for (let i = 0; i < relationships.length; i++) {
+      const rel = relationships.item(i);
+      if (!rel) continue;
+      const id = rel.getAttribute('Id');
+      const type = rel.getAttribute('Type') ?? '';
+      const target = rel.getAttribute('Target');
+      if (id && target && type.includes('/image')) {
+        relsMap[id] = target; // e.g. "media/image1.png"
+      }
+    }
+
+    if (Object.keys(relsMap).length > 0) break; // found what we need
+  }
+
+  return relsMap;
+}
+
+// ─── Image extractor ──────────────────────────────────────────────────────────
+
+/**
+ * Extract all images referenced in the relationship map from the zip.
+ * Returns rId → base64 data URL.
+ */
+async function extractImages(
+  zip: JSZip,
+  relsMap: Record<string, string>,
+): Promise<Record<string, string>> {
+  const imageMap: Record<string, string> = {};
+
+  for (const [rId, relTarget] of Object.entries(relsMap)) {
+    // relTarget is like "media/image1.png" — full path in zip is "word/media/image1.png"
+    const zipPath = relTarget.startsWith('word/') ? relTarget : `word/${relTarget}`;
+    const imageFile = zip.file(zipPath);
+    if (!imageFile) {
+      // Try without the "word/" prefix too (some DOCX pack differently)
+      const altFile = zip.file(relTarget);
+      if (!altFile) continue;
+      const data = await altFile.async('base64');
+      const mime = getMimeType(relTarget);
+      imageMap[rId] = `data:${mime};base64,${data}`;
+      continue;
+    }
+    const data = await imageFile.async('base64');
+    const mime = getMimeType(zipPath);
+    imageMap[rId] = `data:${mime};base64,${data}`;
+  }
+
+  return imageMap;
+}
+
+// ─── Drawing node → rId extractor ────────────────────────────────────────────
+
+/**
+ * Given a <w:drawing> or <w:pict> node, find the r:embed attribute value (rId).
+ * Handles both modern DrawingML (<a:blip r:embed="rIdN"/>) and legacy VML (<v:imagedata r:id="rIdN"/>).
+ */
+function extractRIdFromDrawing(drawingNode: Node): string | null {
+  // Modern path: a:blip r:embed="rIdN"
+  const blips = (drawingNode as Element).getElementsByTagName('a:blip');
+  for (let i = 0; i < blips.length; i++) {
+    const blip = blips.item(i);
+    const rEmbed = blip?.getAttribute('r:embed');
+    if (rEmbed) return rEmbed;
+  }
+
+  // Legacy VML path: v:imagedata r:id="rIdN"
+  const imageData = (drawingNode as Element).getElementsByTagName('v:imagedata');
+  for (let i = 0; i < imageData.length; i++) {
+    const imgData = imageData.item(i);
+    const rId = imgData?.getAttribute('r:id') || imgData?.getAttribute('r:href');
+    if (rId) return rId;
+  }
+
+  // Fallback: any element with r:embed attribute
+  // Walk all descendants looking for r:embed
+  function findREmbed(node: Node): string | null {
+    if (node.nodeType === 1) {
+      const rEmbed = (node as Element).getAttribute('r:embed');
+      if (rEmbed) return rEmbed;
+    }
+    for (let i = 0; i < node.childNodes.length; i++) {
+      const found = findREmbed(node.childNodes[i]);
+      if (found) return found;
+    }
+    return null;
+  }
+  return findREmbed(drawingNode);
+}
+
+// ─── Main paragraph extractor ─────────────────────────────────────────────────
+
 /**
  * Extract paragraph strings directly from a .docx Buffer.
- * Converts native Word OMML equations (<m:oMath> and <m:oMathPara>)
- * into pristine LaTeX $...$ and $$...$$ math blocks.
+ *
+ * Universal behavior:
+ * - Converts native Word OMML equations into LaTeX $...$ and $$...$$
+ * - Extracts all embedded images as base64 data URLs
+ * - Emits [IMG:rIdXX] tokens inline in paragraph text at the exact position
+ *   where images appear — preserving question/option/explanation context
+ *
+ * @param buffer  Raw .docx file buffer
+ * @returns       { paragraphs, imageMap } — paragraphs contain [IMG:rIdXX] tokens
  */
-export async function parseDocxWithOmml(buffer: Buffer): Promise<string[]> {
+export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult> {
   const zip = await JSZip.loadAsync(buffer);
+
+  // ── 1. Load document.xml ──────────────────────────────────────────────────
   const docXmlFile = zip.file('word/document.xml');
   if (!docXmlFile) {
     throw new Error('Invalid .docx file: missing word/document.xml');
@@ -219,6 +408,11 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<string[]> {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'text/xml');
 
+  // ── 2. Build rId → filename and rId → base64 maps ────────────────────────
+  const relsMap  = await buildRelationshipMap(zip);
+  const imageMap = await extractImages(zip, relsMap);
+
+  // ── 3. Walk paragraphs, emit text + [IMG:rIdXX] tokens ───────────────────
   const paragraphNodes = doc.getElementsByTagName('w:p');
   const paragraphs: string[] = [];
 
@@ -228,41 +422,101 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<string[]> {
 
     let paraText = '';
 
+    // Walk all direct children of <w:p>
     for (let cIdx = 0; cIdx < pNode.childNodes.length; cIdx++) {
       const child = pNode.childNodes.item(cIdx);
       if (!child || child.nodeType !== 1) continue;
 
       const tag = child.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
 
-      if (tag === 'oMathPara') {
-        // Block math equation paragraph
-        const latex = ommlElementToLatex(child);
-        if (latex.trim()) {
-          paraText += ` $$${latex.trim()}$$ `;
-        }
-      } else if (tag === 'oMath') {
-        // Inline math equation
-        const latex = ommlElementToLatex(child);
-        if (latex.trim()) {
-          paraText += ` $${latex.trim()}$ `;
-        }
-      } else if (tag === 'r') {
-        // Regular text run
-        const textNodes = (child as Element).getElementsByTagName('w:t');
-        for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
-          const tNode = textNodes.item(tIdx);
-          if (tNode && tNode.textContent) {
-            paraText += tNode.textContent;
+      switch (tag) {
+        case 'oMathPara': {
+          // Block math equation paragraph
+          const latex = ommlElementToLatex(child);
+          if (latex.trim()) {
+            paraText += ` $$${latex.trim()}$$ `;
           }
+          break;
         }
-      } else if (tag === 'hyperlink') {
-        // Text inside hyperlink
-        const textNodes = (child as Element).getElementsByTagName('w:t');
-        for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
-          const tNode = textNodes.item(tIdx);
-          if (tNode && tNode.textContent) {
-            paraText += tNode.textContent;
+
+        case 'oMath': {
+          // Inline math equation
+          const latex = ommlElementToLatex(child);
+          if (latex.trim()) {
+            paraText += ` $${latex.trim()}$ `;
           }
+          break;
+        }
+
+        case 'r': {
+          // Regular text run — may contain text AND/OR a drawing
+          for (let rIdx = 0; rIdx < child.childNodes.length; rIdx++) {
+            const rChild = child.childNodes.item(rIdx);
+            if (!rChild || rChild.nodeType !== 1) continue;
+
+            const rTag = rChild.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+
+            if (rTag === 't') {
+              // Text node — sanitize Word special characters
+              if (rChild.textContent) {
+                paraText += sanitizeText(rChild.textContent);
+              }
+            } else if (rTag === 'drawing' || rTag === 'pict') {
+              // Inline image — extract rId and emit placeholder token
+              const rId = extractRIdFromDrawing(rChild);
+              if (rId && imageMap[rId]) {
+                // Only emit token if image was actually extracted successfully
+                paraText += ` [IMG:${rId}] `;
+              }
+            }
+          }
+          break;
+        }
+
+        case 'hyperlink': {
+          // Text inside hyperlink — sanitize
+          const textNodes = (child as Element).getElementsByTagName('w:t');
+          for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
+            const tNode = textNodes.item(tIdx);
+            if (tNode && tNode.textContent) {
+              paraText += sanitizeText(tNode.textContent);
+            }
+          }
+          break;
+        }
+
+        case 'ins':
+        case 'del': {
+          // Track changes — treat inserts as text, skip deletes
+          if (tag === 'ins') {
+            const textNodes = (child as Element).getElementsByTagName('w:t');
+            for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
+              const tNode = textNodes.item(tIdx);
+              if (tNode && tNode.textContent) {
+                paraText += sanitizeText(tNode.textContent);
+              }
+            }
+          }
+          break;
+        }
+
+        default:
+          // Unknown child — try to extract any text from it (graceful degradation)
+          break;
+      }
+    }
+
+    // Also handle <w:drawing> or <w:pict> that appear as DIRECT children of <w:p>
+    // (some Word versions do this for anchored images)
+    const directDrawings = (pNode as Element).childNodes;
+    for (let dIdx = 0; dIdx < directDrawings.length; dIdx++) {
+      const dChild = directDrawings.item(dIdx);
+      if (!dChild || dChild.nodeType !== 1) continue;
+      const dTag = dChild.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+      if (dTag === 'drawing' || dTag === 'pict') {
+        const rId = extractRIdFromDrawing(dChild);
+        if (rId && imageMap[rId] && !paraText.includes(`[IMG:${rId}]`)) {
+          paraText += ` [IMG:${rId}] `;
         }
       }
     }
@@ -273,5 +527,5 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<string[]> {
     }
   }
 
-  return paragraphs;
+  return { paragraphs, imageMap };
 }
