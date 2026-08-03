@@ -432,11 +432,10 @@ function renderInlineImages(
 ): string {
   if (!dataUrls || dataUrls.length === 0) return '';
 
-  const margin = compact ? '3pt 0 2pt 0' : '5pt 0 4pt 0';
+  const margin = compact ? '3pt 0 2pt 0' : '4pt 0 4pt 0';
 
   return dataUrls.map(src => `
     <div style="
-      text-align:center;
       margin:${margin};
       break-inside:avoid;
       page-break-inside:avoid;
@@ -444,11 +443,11 @@ function renderInlineImages(
     ">
       <img src="${src}" style="
         max-width:${maxWidthMm}mm;
-        max-height:60mm;
+        max-height:55mm;
         width:auto;
         height:auto;
         object-fit:contain;
-        display:inline-block;
+        display:block;
         -webkit-print-color-adjust:exact;
         print-color-adjust:exact;
       " />
@@ -461,43 +460,66 @@ function renderInlineImages(
 function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: number): string {
   const { primaryColor, accentColor } = settings;
 
-  // Determine layout: use horizontal (flex-wrap) only when ALL options are text-only AND short
   const hasAnyOptionImage = q.optionImages &&
     (q.optionImages.A || q.optionImages.B || q.optionImages.C || q.optionImages.D);
   const maxOptLen = Math.max(...Object.values(q.options).map(o => o.length));
   const useHorizontal = !hasAnyOptionImage && maxOptLen <= 40;
 
-  // Build each option — text + optional image
-  function buildOption(l: 'A' | 'B' | 'C' | 'D'): { text: string, img: string } {
+  // Build a single option cell: letter label + optional inline image + optional text
+  function buildOptionCell(l: 'A' | 'B' | 'C' | 'D'): string {
     const optText = renderMath(stripMarkdown(q.options[l]));
-    const optImg = renderInlineImages(
-      q.optionImages?.[l] ? [q.optionImages[l]!] : undefined,
-      /* maxWidthMm */ 42,
-      /* compact */ true,
-    );
-    return { text: optText, img: optImg };
+    const hasImg  = !!(q.optionImages?.[l]);
+
+    // Image: small, left-aligned, inline next to the label — NOT centered, NOT full-width
+    const imgHtml = hasImg
+      ? `<img src="${q.optionImages![l]}" style="
+          display:block;
+          max-width:35mm;
+          max-height:28mm;
+          width:auto;
+          height:auto;
+          object-fit:contain;
+          margin-top:2pt;
+          -webkit-print-color-adjust:exact;
+          print-color-adjust:exact;
+        " />`
+      : '';
+
+    return `<div style="
+        display:flex;
+        gap:4pt;
+        align-items:flex-start;
+        break-inside:avoid;
+        page-break-inside:avoid;
+      ">
+      <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;min-width:14px;">${l})</strong>
+      <span style="font-size:8.5pt;word-break:break-word;">
+        ${optText}${imgHtml}
+      </span>
+    </div>`;
   }
 
-  const optionsHtml = useHorizontal
+  // When options have images → 2×2 grid (A|B top row, C|D bottom row)
+  // When text-only + short  → horizontal flex-wrap
+  // When text-only + long   → vertical list
+  const optionsHtml = hasAnyOptionImage
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4pt 8pt;margin:5pt 0 6pt 0;">
+        ${(['A','B','C','D'] as const).map(l => buildOptionCell(l)).join('')}
+       </div>`
+    : useHorizontal
     ? `<div style="display:flex;flex-wrap:wrap;gap:3px 18px;margin:4px 0 5px 0;">
-        ${(['A','B','C','D'] as const).map(l => {
-          const { text, img } = buildOption(l);
-          return `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
+        ${(['A','B','C','D'] as const).map(l =>
+          `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
             <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;">${l})</strong>
-            <span style="font-size:8.5pt;">${text}${img}</span>
-           </span>`;
-        }).join('')}
+            <span style="font-size:8.5pt;">${renderMath(stripMarkdown(q.options[l]))}</span>
+           </span>`).join('')}
        </div>`
     : `<div style="margin:4px 0 5px 0;">
-        ${(['A','B','C','D'] as const).map(l => {
-          const { text, img } = buildOption(l);
-          // If option has an image and no/little text, make it more compact
-          const hasImg = !!(q.optionImages?.[l]);
-          return `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:${hasImg ? '4px' : '2px'};break-inside:avoid;page-break-inside:avoid;">
+        ${(['A','B','C','D'] as const).map(l =>
+          `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:2px;">
             <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;min-width:14px;">${l})</strong>
-            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${text}${img}</span>
-           </div>`;
-        }).join('')}
+            <span style="font-size:8.5pt;word-break:break-word;flex:1;">${renderMath(stripMarkdown(q.options[l]))}</span>
+           </div>`).join('')}
        </div>`;
 
   const answerBadge = settings.showAnswer
