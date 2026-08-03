@@ -418,12 +418,72 @@ function renderPassageBlock(passageText: string, groupRange: [number, number], p
 // ─── Inline image renderer ─────────────────────────────────────────────────────
 
 /**
- * Renders one or more base64 data URL images as centered, break-safe <img> blocks.
- * Works universally for any DOCX — question body images, option images, explanation images.
- *
- * @param dataUrls  Array of base64 data URLs
- * @param maxWidthMm  Max display width in mm (default 88mm — fits A4 content area)
- * @param compact     When true, uses smaller vertical margins (for options grid)
+ * Read pixel dimensions from a base64 data URL without any extra libraries.
+ * Supports PNG (reads IHDR) and JPEG (scans for SOF0/SOF2 marker).
+ * Returns null on any failure — callers must handle gracefully.
+ */
+function getImageDimensions(dataUrl: string): { w: number; h: number } | null {
+  try {
+    const comma = dataUrl.indexOf(',');
+    if (comma === -1) return null;
+    const header = dataUrl.slice(0, comma);
+    const b64    = dataUrl.slice(comma + 1);
+
+    // PNG: need first 24 bytes → 32 base64 chars
+    if (header.includes('image/png')) {
+      const bytes = Buffer.from(b64.slice(0, 32), 'base64');
+      if (bytes.length < 24) return null;
+      // PNG signature = 8 bytes, IHDR = 4 len + 4 type + 4 width + 4 height
+      const w = bytes.readUInt32BE(16);
+      const h = bytes.readUInt32BE(20);
+      if (w > 0 && h > 0) return { w, h };
+    }
+
+    // JPEG: scan for SOF0 (0xFFC0) or SOF2 (0xFFC2) marker — need first ~200 bytes
+    if (header.includes('image/jpeg') || header.includes('image/jpg')) {
+      const bytes = Buffer.from(b64.slice(0, 270), 'base64');
+      for (let i = 0; i < bytes.length - 8; i++) {
+        if (bytes[i] === 0xFF &&
+            (bytes[i + 1] === 0xC0 || bytes[i + 1] === 0xC2 || bytes[i + 1] === 0xC1)) {
+          const h = (bytes[i + 5] << 8) | bytes[i + 6];
+          const w = (bytes[i + 7] << 8) | bytes[i + 8];
+          if (w > 0 && h > 0) return { w, h };
+        }
+      }
+    }
+
+    // BMP: width at bytes 18-21, height at 22-25 (little-endian)
+    if (header.includes('image/bmp')) {
+      const bytes = Buffer.from(b64.slice(0, 40), 'base64');
+      if (bytes.length >= 26) {
+        const w = bytes.readInt32LE(18);
+        const h = Math.abs(bytes.readInt32LE(22));
+        if (w > 0 && h > 0) return { w, h };
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classify an image as landscape, portrait, or square based on pixel dimensions.
+ * Falls back to 'square' when dimensions are unavailable (safe default = 2x2 grid).
+ */
+function classifyAspect(dataUrl: string): 'landscape' | 'portrait' | 'square' {
+  const dims = getImageDimensions(dataUrl);
+  if (!dims) return 'square'; // safe fallback
+  const ratio = dims.w / dims.h;
+  if (ratio > 1.4) return 'landscape';  // wide: width is 40%+ more than height
+  if (ratio < 0.7) return 'portrait';   // tall: height is 40%+ more than width
+  return 'square';
+}
+
+/**
+ * Renders question body or explanation images.
+ * Adapts max-width/max-height based on actual detected image dimensions.
  */
 function renderInlineImages(
   dataUrls: string[] | undefined,
@@ -431,10 +491,20 @@ function renderInlineImages(
   compact = false,
 ): string {
   if (!dataUrls || dataUrls.length === 0) return '';
-
   const margin = compact ? '3pt 0 2pt 0' : '4pt 0 4pt 0';
 
-  return dataUrls.map(src => `
+  return dataUrls.map(src => {
+    const dims = getImageDimensions(src);
+    // Adapt constraints to the actual image shape
+    let mw = maxWidthMm;
+    let mh = 55; // default max-height in mm
+    if (dims) {
+      const ratio = dims.w / dims.h;
+      if (ratio > 2.0)   { mw = 88; mh = 35; }  // very wide — limit height more
+      else if (ratio < 0.5) { mw = 50; mh = 70; }  // very tall — narrow + taller
+    }
+
+    return `
     <div style="
       margin:${margin};
       break-inside:avoid;
@@ -442,8 +512,8 @@ function renderInlineImages(
       line-height:0;
     ">
       <img src="${src}" style="
-        max-width:${maxWidthMm}mm;
-        max-height:55mm;
+        max-width:${mw}mm;
+        max-height:${mh}mm;
         width:auto;
         height:auto;
         object-fit:contain;
@@ -452,7 +522,8 @@ function renderInlineImages(
         print-color-adjust:exact;
       " />
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ─── Question block ───────────────────────────────────────────────────────────
@@ -465,48 +536,90 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
   const maxOptLen = Math.max(...Object.values(q.options).map(o => o.length));
   const useHorizontal = !hasAnyOptionImage && maxOptLen <= 40;
 
-  // Build a single option cell: letter label + optional inline image + optional text
+  // ── Smart layout detection for image options ──────────────────────────────
+  // Read actual pixel dimensions from the base64 header to decide layout:
+  //   landscape (w/h > 1.4) → single-column: each option gets the full row width
+  //   square / portrait     → 2×2 grid: A|B top, C|D bottom
+  //
+  // Strategy: if ANY option image is landscape → use single-column for ALL options
+  // (mixing layouts looks bad; single-column is always safe)
+  type OptionLayout = '2x2' | 'single-col';
+  let optionLayout: OptionLayout = '2x2';
+  if (hasAnyOptionImage) {
+    for (const l of ['A', 'B', 'C', 'D'] as const) {
+      const src = q.optionImages?.[l];
+      if (!src) continue;
+      if (classifyAspect(src) === 'landscape') {
+        optionLayout = 'single-col';
+        break;
+      }
+    }
+  }
+
+  // ── Build a single option cell ────────────────────────────────────────────
   function buildOptionCell(l: 'A' | 'B' | 'C' | 'D'): string {
     const optText = renderMath(stripMarkdown(q.options[l]));
-    const hasImg  = !!(q.optionImages?.[l]);
+    const src     = q.optionImages?.[l];
 
-    // Image: small, left-aligned, inline next to the label — NOT centered, NOT full-width
-    const imgHtml = hasImg
-      ? `<img src="${q.optionImages![l]}" style="
-          display:block;
-          max-width:35mm;
-          max-height:28mm;
-          width:auto;
-          height:auto;
-          object-fit:contain;
-          margin-top:2pt;
-          -webkit-print-color-adjust:exact;
-          print-color-adjust:exact;
-        " />`
-      : '';
+    let imgHtml = '';
+    if (src) {
+      // Adapt image size based on layout AND actual image dimensions
+      let mw: string;
+      let mh: string;
+      if (optionLayout === 'single-col') {
+        // Full-width mode — images can be large
+        const dims = getImageDimensions(src);
+        if (dims && dims.w / dims.h > 2.5) {
+          mw = '82mm'; mh = '30mm'; // very wide banner image
+        } else {
+          mw = '82mm'; mh = '55mm'; // normal landscape
+        }
+      } else {
+        // 2×2 grid — each cell is ~83mm; keep images compact
+        const aspect = classifyAspect(src);
+        if (aspect === 'portrait') {
+          mw = '28mm'; mh = '42mm'; // tall/narrow → allow more height
+        } else {
+          mw = '38mm'; mh = '32mm'; // square → balanced
+        }
+      }
 
-    return `<div style="
-        display:flex;
-        gap:4pt;
-        align-items:flex-start;
-        break-inside:avoid;
-        page-break-inside:avoid;
-      ">
+      imgHtml = `<img src="${src}" style="
+        display:block;
+        max-width:${mw};
+        max-height:${mh};
+        width:auto;
+        height:auto;
+        object-fit:contain;
+        margin-top:2pt;
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
+      " />`;
+    }
+
+    const cellStyle = optionLayout === 'single-col'
+      ? 'display:flex;gap:4pt;align-items:flex-start;margin-bottom:5pt;break-inside:avoid;page-break-inside:avoid;'
+      : 'display:flex;gap:4pt;align-items:flex-start;break-inside:avoid;page-break-inside:avoid;';
+
+    return `<div style="${cellStyle}">
       <strong style="color:${primaryColor};flex-shrink:0;font-size:8.5pt;min-width:14px;">${l})</strong>
-      <span style="font-size:8.5pt;word-break:break-word;">
-        ${optText}${imgHtml}
-      </span>
+      <span style="font-size:8.5pt;word-break:break-word;">${optText}${imgHtml}</span>
     </div>`;
   }
 
-  // When options have images → 2×2 grid (A|B top row, C|D bottom row)
-  // When text-only + short  → horizontal flex-wrap
-  // When text-only + long   → vertical list
+  // ── Render options ────────────────────────────────────────────────────────
   const optionsHtml = hasAnyOptionImage
-    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4pt 8pt;margin:5pt 0 6pt 0;">
-        ${(['A','B','C','D'] as const).map(l => buildOptionCell(l)).join('')}
-       </div>`
+    ? optionLayout === 'single-col'
+      // Single-column: each option takes the full row — for wide/landscape images
+      ? `<div style="margin:5pt 0 6pt 0;">
+          ${(['A','B','C','D'] as const).map(l => buildOptionCell(l)).join('')}
+         </div>`
+      // 2×2 grid: A|B on row 1, C|D on row 2 — for square/portrait images
+      : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4pt 10pt;margin:5pt 0 6pt 0;">
+          ${(['A','B','C','D'] as const).map(l => buildOptionCell(l)).join('')}
+         </div>`
     : useHorizontal
+    // Text-only short options — horizontal flex
     ? `<div style="display:flex;flex-wrap:wrap;gap:3px 18px;margin:4px 0 5px 0;">
         ${(['A','B','C','D'] as const).map(l =>
           `<span style="display:inline-flex;gap:3px;align-items:flex-start;">
@@ -514,6 +627,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
             <span style="font-size:8.5pt;">${renderMath(stripMarkdown(q.options[l]))}</span>
            </span>`).join('')}
        </div>`
+    // Text-only long options — vertical list
     : `<div style="margin:4px 0 5px 0;">
         ${(['A','B','C','D'] as const).map(l =>
           `<div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:2px;">
