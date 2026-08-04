@@ -311,7 +311,10 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     const cs = CORNER_ICON_SIZE_MM; // 16mm diameter
     const half = cs / 2; // 8mm
 
-    const logoEl = logoDataUrl
+    // Use custom corner logo from settings if provided, else fall back to app logo
+    const cornerLogoSrc = settings.cornerLogoDataUrl ?? logoDataUrl;
+
+    const logoEl = cornerLogoSrc
       ? `<div style="
           width:${cs}mm;height:${cs}mm;
           border-radius:50%;
@@ -322,7 +325,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
           box-shadow:0 1px 4px rgba(0,0,0,0.2);
           -webkit-print-color-adjust:exact;print-color-adjust:exact;
         ">
-          <img src="${logoDataUrl}" style="width:82%;height:82%;object-fit:contain;" />
+          <img src="${cornerLogoSrc}" style="width:82%;height:82%;object-fit:contain;" />
         </div>`
       : `<div style="
           width:${cs}mm;height:${cs}mm;

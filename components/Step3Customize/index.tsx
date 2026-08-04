@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
@@ -1140,6 +1140,65 @@ export default function Step3Customize() {
                     style={{ ['--pct' as string]: `${((pdfSettings.borderWidthMm - 1) / (6 - 1)) * 100}%` }}
                     onChange={e => update('borderWidthMm', parseFloat(e.target.value))}
                   />
+                </div>
+
+                {/* Corner Logo */}
+                <div style={{ marginTop: '0.5rem', padding: '0.875rem', background: 'rgba(99,102,241,0.04)', borderRadius: '0.75rem', border: '1px solid rgba(99,102,241,0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--primary)', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151' }}>Corner Logo</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94A3B8', marginLeft: '0.25rem' }}>appears in all 4 corners of the border</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.375rem', marginBottom: '0.625rem', padding: '0.5rem 0.625rem', background: 'rgba(99,102,241,0.07)', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.18)' }}>
+                    <svg style={{ width: '0.875rem', height: '0.875rem', color: '#6366F1', flexShrink: 0, marginTop: '0.1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                    <div>
+                      <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1', marginBottom: '0.15rem' }}>Recommended upload dimensions</p>
+                      <p style={{ fontSize: '0.68rem', color: '#475569', lineHeight: 1.6 }}>
+                        <strong>200 x 200 px minimum</strong> &middot; Square (1:1 ratio) &middot; PNG or JPG &middot; Max 2 MB
+                      </p>
+                      <p style={{ fontSize: '0.65rem', color: '#94A3B8', lineHeight: 1.5, marginTop: '0.1rem' }}>
+                        Each corner circle is <strong>16 x 16 mm</strong> in the PDF (~60 px at screen, ~189 px at 300 dpi print).
+                        Upload at 200 x 200 px or larger for sharp print quality.
+                      </p>
+                    </div>
+                  </div>
+                  {pdfSettings.cornerLogoDataUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.625rem', background: 'white', borderRadius: '0.625rem', border: '1px solid #E2E8F0' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={pdfSettings.cornerLogoDataUrl} alt="Custom corner logo"
+                        style={{ width: '3rem', height: '3rem', objectFit: 'contain', borderRadius: '50%', border: `2px solid ${pdfSettings.primaryColor}`, background: pdfSettings.primaryColor, padding: '0.25rem', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>Custom corner logo set</p>
+                        <p style={{ fontSize: '0.67rem', color: '#94A3B8' }}>Shown in all 4 corner circles of the PDF border</p>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <button className="btn-ghost text-xs px-2 py-1" onClick={() => document.getElementById('corner-logo-upload')?.click()}>Change</button>
+                        <button className="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-600" onClick={() => update('cornerLogoDataUrl' as keyof PDFSettings, undefined as any)}>Remove</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label htmlFor="corner-logo-upload" className="btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                      Upload Corner Logo
+                      <span style={{ fontSize: '0.65rem', color: '#94A3B8', fontWeight: 400 }}>(200x200 px+, square)</span>
+                    </label>
+                  )}
+                  <input id="corner-logo-upload" type="file" accept="image/png,image/jpeg" className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) { alert('Corner logo image must be under 2 MB.'); return; }
+                      const reader = new FileReader();
+                      reader.onloadend = () => update('cornerLogoDataUrl' as keyof PDFSettings, reader.result as any);
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }} />
                 </div>
               </div>
             )}
