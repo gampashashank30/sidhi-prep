@@ -487,6 +487,7 @@ function classifyAspect(dataUrl: string): 'landscape' | 'portrait' | 'square' {
 /**
  * Renders question body or explanation images.
  * Adapts max-width/max-height based on actual detected image dimensions.
+ * @param maxWidthMm  Maximum width in mm — respected in all aspect-ratio branches.
  */
 function renderInlineImages(
   dataUrls: string[] | undefined,
@@ -498,13 +499,16 @@ function renderInlineImages(
 
   return dataUrls.map(src => {
     const dims = getImageDimensions(src);
-    // Adapt constraints to the actual image shape
+    // Adapt constraints to the actual image shape, while honouring maxWidthMm
     let mw = maxWidthMm;
-    let mh = 55; // default max-height in mm
+    let mh = 120; // default max-height in mm — generous for solution images
     if (dims) {
       const ratio = dims.w / dims.h;
-      if (ratio > 2.0)   { mw = 88; mh = 35; }  // very wide — limit height more
-      else if (ratio < 0.5) { mw = 50; mh = 70; }  // very tall — narrow + taller
+      if (ratio > 2.0)   { mw = maxWidthMm; mh = Math.round(maxWidthMm / ratio * 0.55); }  // very wide
+      else if (ratio < 0.5) { mw = Math.min(50, maxWidthMm); mh = 120; }  // very tall — narrow + taller
+      else                { mh = Math.round(maxWidthMm / ratio); }  // normal proportional
+      // Safety cap: never exceed page height
+      if (mh > 150) mh = 150;
     }
 
     return `
@@ -528,6 +532,7 @@ function renderInlineImages(
   `;
   }).join('');
 }
+
 
 // ─── Question block ───────────────────────────────────────────────────────────
 
@@ -732,8 +737,26 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     ? `<div style="color:${NEUTRAL_TEXT};font-size:8.5pt;line-height:1.55;margin-bottom:6px;word-break:break-word;">${renderMath(stripMarkdown(q.explanation))}</div>`
     : `<div style="color:#94A3B8;font-size:8.5pt;font-style:italic;margin-bottom:6px;padding:6px 10px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:4px;">No explanation available</div>`;
 
+  // Solution images — rendered after explanation text, before the answer bar.
+  // These are typically hand-written or printed solution workings embedded in the DOCX.
+  // When present, the outer box must NOT have break-inside:avoid (images can be tall),
+  // but each image still carries its own break-inside:avoid.
+  const hasExpImages = q.explanationImages && q.explanationImages.length > 0;
+  const expImagesHtml = hasExpImages
+    ? `<div style="margin:6px 0 8px 0;">
+        <div style="font-size:7.5pt;font-weight:600;color:#64748B;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Solution</div>
+        ${renderInlineImages(q.explanationImages, 140, false)}
+      </div>`
+    : '';
+
+  // When the explanation block contains large solution images, allow the block
+  // to break across pages. Without images, keep break-inside:avoid for compactness.
+  const breakStyle = hasExpImages
+    ? ''
+    : 'break-inside:avoid;page-break-inside:avoid;';
+
   return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
-    break-inside:avoid;page-break-inside:avoid;
+    ${breakStyle}
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
     background:#FAFBFC;
@@ -741,6 +764,7 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
   ">
     <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${displayNumber} — Explanation</div>
     ${explanationHtml}
+    ${expImagesHtml}
     <div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
       <strong>Correct Answer:</strong> ${q.answer}) ${renderMath(stripMarkdown(q.options[q.answer]))}
     </div>
