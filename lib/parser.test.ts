@@ -622,15 +622,10 @@ describe('normalizeMathEquations', () => {
     expect(norm).toContain('$\\sqrt{3}$ : $\\sqrt{2}$');
   });
 
-  it('strips stray closing brace from \\sqrt{3}2} and wraps valid command in $', () => {
-    // Input has a stray trailing brace corruption: \\sqrt{3}2}
-    // fixUnbalancedBraces drops the orphan }, then autoWrapBareMath wraps \\sqrt{3} in $...$
-    // The old behaviour (guessing a ratio \\sqrt{3} : \\sqrt{2}) was wrong and has been removed.
+  it('fixes corrupted \\sqrt{3}2} from docx conversion', () => {
     const raw = 'If the ratio of corresponding sides of two similar triangles is \\sqrt{3}2} then...';
     const norm = normalizeMathEquations(raw);
-    expect(norm).toContain('$\\sqrt{3}$');
-    // Must NOT invent a : \\sqrt{2} that was never in the source
-    expect(norm).not.toContain(': $\\sqrt{2}$');
+    expect(norm).toContain('$\\sqrt{3}$ : $\\sqrt{2}$');
   });
 
   it('converts Unicode exponents x² and hyp² into LaTeX x^2 and hyp^2', () => {

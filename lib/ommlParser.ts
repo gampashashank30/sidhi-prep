@@ -430,9 +430,8 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
       const tag = child.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
 
       switch (tag) {
-        case 'oMathPara':
-        case 'm:oMathPara': {
-          // Block math equation paragraph (direct child of w:p)
+        case 'oMathPara': {
+          // Block math equation paragraph
           const latex = ommlElementToLatex(child);
           if (latex.trim()) {
             paraText += ` $$${latex.trim()}$$ `;
@@ -440,9 +439,8 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
           break;
         }
 
-        case 'oMath':
-        case 'm:oMath': {
-          // Inline math equation (direct child of w:p)
+        case 'oMath': {
+          // Inline math equation
           const latex = ommlElementToLatex(child);
           if (latex.trim()) {
             paraText += ` $${latex.trim()}$ `;
@@ -451,7 +449,7 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
         }
 
         case 'r': {
-          // Regular text run — may contain text, drawings, AND/OR inline math
+          // Regular text run — may contain text AND/OR a drawing
           for (let rIdx = 0; rIdx < child.childNodes.length; rIdx++) {
             const rChild = child.childNodes.item(rIdx);
             if (!rChild || rChild.nodeType !== 1) continue;
@@ -469,14 +467,6 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
               if (rId && imageMap[rId]) {
                 // Only emit token if image was actually extracted successfully
                 paraText += ` [IMG:${rId}] `;
-              }
-            } else if (rTag === 'oMath' || rTag === 'oMathPara' || rTag === 'm:oMath' || rTag === 'm:oMathPara') {
-              // Inline math equation embedded inside a w:r run — very common in Word DOCX
-              // Word places <m:oMath> as a sibling of <w:t> inside <w:r> for inline equations
-              const latex = ommlElementToLatex(rChild);
-              if (latex.trim()) {
-                const isBlock = rTag === 'oMathPara' || rTag === 'm:oMathPara';
-                paraText += isBlock ? ` $$${latex.trim()}$$ ` : ` $${latex.trim()}$ `;
               }
             }
           }

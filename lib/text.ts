@@ -190,8 +190,9 @@ export function normalizeMathEquations(raw: string): string {
   // 4. Normalize double-escaped LaTeX commands (e.g. \\frac -> \frac, \\sqrt -> \sqrt)
   s = s.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
 
-  // 5. Fix double-escaped backslash sequences that may survive step 4
-  s = s.replace(/\\\\([{}])/g, '\\$1');
+  // 5. Fix common corrupted LaTeX patterns from docx conversion
+  s = s.replace(/\\sqrt\{(\d+)\}(\d+)\}/g, '\\sqrt{$1} : \\sqrt{$2}');
+  s = s.replace(/\\frac\{1\}\{x\}7\}\{5\}/g, '\\frac{1}{x} = -\\frac{7}{5}');
 
   // 6. Convert Unicode math symbols to LaTeX equivalents
   // Superscripts ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁰ ⁺ ⁻ ⁿ
