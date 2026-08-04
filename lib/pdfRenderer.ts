@@ -167,45 +167,68 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
     });
 
     // ── Ad PDF merging ────────────────────────────────────────────────────────
-    // IMPORTANT ORDER: mergeAdPages MUST run BEFORE fixPdfDestinationsForMobile.
+    // IMPORTANT ORDER: fixPdfDestinationsForMobile MUST run BEFORE mergeAdPages.
     //
-    // Why: fixPdfDestinationsForMobile does raw binary text-level regex patches on
-    // the PDF bytes (e.g. replacing "/D (q-1)" with "/D [5 0 R /XYZ 0 740 0]").
-    // If we run it first and then pass that patched buffer to pdf-lib's PDFDocument.load(),
-    // pdf-lib re-serializes the whole document with a fresh cross-reference table —
-    // renumbering ALL object IDs. This means:
-    //   a) The raw-patched "[5 0 R /XYZ ...]" references now point to wrong objects.
-    //   b) The ad PDF's /Annots (URI link actions) may fail to copy cleanly because
-    //      pdf-lib is starting from an already-corrupted binary.
+    // Root cause of broken internal links with ads:
+    //   pdf-lib's copyPages() faithfully copies each page's /Annots array (which
+    //   holds link annotations with /D (q-5) named-destination strings) but it
+    //   silently DROPS the document-level /Names catalog (the lookup table that
+    //   maps "q-5" → [pageObject /XYZ 0 740 0]).  Without /Names, every /D (q-5)
+    //   reference is unresolvable — "View Explanation ↓", "← Back to Question",
+    //   and TOC links all silently fail in every PDF viewer.
+    //
+    // Why pre-patching is safe (object IDs are correctly remapped by pdf-lib):
+    //   fixPdfDestinationsForMobile replaces /D (q-5) with /D [5 0 R /XYZ 0 740 0].
+    //   The [5 0 R ...] form is an array containing an indirect object reference.
+    //   pdf-lib's object copier traverses annotation dictionaries recursively and
+    //   remaps every indirect reference it finds (5 0 R → new ID in result doc).
+    //   So the patched [5 0 R /XYZ 0 740 0] becomes [<newID> 0 R /XYZ 0 740 0]
+    //   in the merged output — pointing correctly to the right page, even after
+    //   ad pages shift all content page indices.
+    //
+    // Why the OLD order (merge → patch) was wrong:
+    //   After merging, pdf-lib produces a fresh document with no /Names dict at all.
+    //   fixPdfDestinationsForMobile scans for /Names entries to build its destMap;
+    //   finding none, it returns the buffer unchanged — leaving every internal link
+    //   broken.
+    //
+    // This pre-patch also fixes internal links when NO ads are uploaded:
+    //   Google Drive Mobile and many mobile PDF apps strip the /Names dict entirely,
+    //   so the inline [pageRef /XYZ] form is needed for tap-navigation even without
+    //   any ad merging.
     //
     // Correct order:
-    //   1. mergeAdPages on the CLEAN Puppeteer buffer → pdf-lib works correctly,
-    //      ad /Annots (hyperlinks) are preserved faithfully.
-    //   2. fixPdfDestinationsForMobile on the MERGED result → applied once, final,
-    //      no further re-serialization will scramble the patched object references.
-    let puppeteerBuffer = Buffer.from(pdfBuffer);
+    //   1. fixPdfDestinationsForMobile on the CLEAN Puppeteer buffer → converts
+    //      named destinations to self-contained inline page references.
+    //   2. mergeAdPages on the patched buffer → pdf-lib remaps all indirect refs
+    //      correctly; ad PDF's own /Annots (URI hyperlinks) are preserved faithfully.
+    const puppeteerBuffer = Buffer.from(pdfBuffer);
+
+    // Step 1: ALWAYS patch named destinations first, on the clean Puppeteer buffer.
+    const patchedBuffer = fixPdfDestinationsForMobile(puppeteerBuffer);
+
     let finalBuffer: Buffer;
 
     if (opts.settings.adPdf?.base64 && opts.settings.adPdf.pageInterval > 0) {
       try {
         const adBuffer = Buffer.from(opts.settings.adPdf.base64, 'base64');
-        // Step 1: merge on the clean buffer so pdf-lib sees a valid unmodified PDF
-        const mergedBuffer = await mergeAdPages(
-          puppeteerBuffer,
+        // Step 2 (with ads): merge ad pages into the already-patched buffer.
+        // All internal link annotations now carry self-contained [pageRef /XYZ]
+        // arrays that survive the pdf-lib copy with correctly remapped object IDs.
+        finalBuffer = await mergeAdPages(
+          patchedBuffer,
           adBuffer,
           opts.settings.adPdf.pageInterval,
         );
-        // Step 2: apply mobile destination fix to the final merged output
-        finalBuffer = fixPdfDestinationsForMobile(mergedBuffer);
       } catch (adErr) {
         // Never fail the whole PDF generation because of an ad merge error;
-        // fall back to main PDF with mobile fix applied normally.
+        // fall back to the patched main PDF — internal links still work, just no ads.
         console.error('[pdfRenderer] Ad PDF merge failed, skipping ads:', adErr);
-        finalBuffer = fixPdfDestinationsForMobile(puppeteerBuffer);
+        finalBuffer = patchedBuffer;
       }
     } else {
-      // No ad PDF — apply mobile fix to the Puppeteer output directly
-      finalBuffer = fixPdfDestinationsForMobile(puppeteerBuffer);
+      // No ad PDF — patched buffer is the final output.
+      finalBuffer = patchedBuffer;
     }
 
     return finalBuffer;
