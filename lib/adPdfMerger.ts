@@ -29,9 +29,15 @@ export async function mergeAdPages(
   adPdfBuffer: Buffer,
   pageInterval: number,
 ): Promise<Buffer> {
-  // Load both PDFs
-  const mainDoc = await PDFDocument.load(mainPdfBuffer);
-  const adDoc   = await PDFDocument.load(adPdfBuffer);
+  // Load both PDFs.
+  // ignoreEncryption: true is required for PDFs exported from tools like Canva or
+  // Adobe that set encryption metadata even when the content is not actually protected.
+  // Without this flag, pdf-lib throws "Input document to PDFDocumentWriter is encrypted"
+  // and the entire ad merge silently fails (caught upstream), leaving the final PDF
+  // with no ad pages at all — which also means the ad's URI hyperlinks are lost.
+  const mainDoc = await PDFDocument.load(mainPdfBuffer, { ignoreEncryption: true });
+  const adDoc   = await PDFDocument.load(adPdfBuffer,  { ignoreEncryption: true });
+
 
   const mainPageCount = mainDoc.getPageCount();
   const adPageCount   = adDoc.getPageCount();

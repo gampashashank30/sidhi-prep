@@ -166,24 +166,46 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       `,
     });
 
-    let finalBuffer = fixPdfDestinationsForMobile(Buffer.from(pdfBuffer));
-
     // ── Ad PDF merging ────────────────────────────────────────────────────────
-    // If the user uploaded an ad PDF, insert its pages at every N content pages.
-    // This runs AFTER Puppeteer so the ad pages (and their hyperlinks) come
-    // directly from the original PDF — no re-rendering through HTML/CSS.
+    // IMPORTANT ORDER: mergeAdPages MUST run BEFORE fixPdfDestinationsForMobile.
+    //
+    // Why: fixPdfDestinationsForMobile does raw binary text-level regex patches on
+    // the PDF bytes (e.g. replacing "/D (q-1)" with "/D [5 0 R /XYZ 0 740 0]").
+    // If we run it first and then pass that patched buffer to pdf-lib's PDFDocument.load(),
+    // pdf-lib re-serializes the whole document with a fresh cross-reference table —
+    // renumbering ALL object IDs. This means:
+    //   a) The raw-patched "[5 0 R /XYZ ...]" references now point to wrong objects.
+    //   b) The ad PDF's /Annots (URI link actions) may fail to copy cleanly because
+    //      pdf-lib is starting from an already-corrupted binary.
+    //
+    // Correct order:
+    //   1. mergeAdPages on the CLEAN Puppeteer buffer → pdf-lib works correctly,
+    //      ad /Annots (hyperlinks) are preserved faithfully.
+    //   2. fixPdfDestinationsForMobile on the MERGED result → applied once, final,
+    //      no further re-serialization will scramble the patched object references.
+    let puppeteerBuffer = Buffer.from(pdfBuffer);
+    let finalBuffer: Buffer;
+
     if (opts.settings.adPdf?.base64 && opts.settings.adPdf.pageInterval > 0) {
       try {
         const adBuffer = Buffer.from(opts.settings.adPdf.base64, 'base64');
-        finalBuffer = await mergeAdPages(
-          finalBuffer,
+        // Step 1: merge on the clean buffer so pdf-lib sees a valid unmodified PDF
+        const mergedBuffer = await mergeAdPages(
+          puppeteerBuffer,
           adBuffer,
           opts.settings.adPdf.pageInterval,
         );
+        // Step 2: apply mobile destination fix to the final merged output
+        finalBuffer = fixPdfDestinationsForMobile(mergedBuffer);
       } catch (adErr) {
-        // Never fail the whole PDF generation because of an ad merge error
+        // Never fail the whole PDF generation because of an ad merge error;
+        // fall back to main PDF with mobile fix applied normally.
         console.error('[pdfRenderer] Ad PDF merge failed, skipping ads:', adErr);
+        finalBuffer = fixPdfDestinationsForMobile(puppeteerBuffer);
       }
+    } else {
+      // No ad PDF — apply mobile fix to the Puppeteer output directly
+      finalBuffer = fixPdfDestinationsForMobile(puppeteerBuffer);
     }
 
     return finalBuffer;
