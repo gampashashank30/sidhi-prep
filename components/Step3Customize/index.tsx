@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
@@ -975,6 +975,47 @@ export default function Step3Customize() {
 
           {/* Cover image */}
           <CoverImageSection />
+
+          {/* Header Text */}
+          <SettingsSection title="Header Text" icon={
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            </svg>
+          }>
+            <p className="text-xs text-gray-400 mb-3">
+              Text shown in the header bar on every page of the PDF.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="header-title" className="block text-sm font-semibold text-gray-800 mb-1">
+                  Left title <span className="text-gray-400 font-normal">(italic)</span>
+                </label>
+                <input
+                  id="header-title"
+                  type="text"
+                  className="form-input w-full"
+                  placeholder="e.g. Siddhi"
+                  maxLength={60}
+                  value={pdfSettings.headerTitle ?? ''}
+                  onChange={e => update('headerTitle' as keyof PDFSettings, e.target.value as any)}
+                />
+              </div>
+              <div>
+                <label htmlFor="header-label" className="block text-sm font-semibold text-gray-800 mb-1">
+                  Right label <span className="text-gray-400 font-normal">(small caps)</span>
+                </label>
+                <input
+                  id="header-label"
+                  type="text"
+                  className="form-input w-full"
+                  placeholder="e.g. QUESTION BANK"
+                  maxLength={40}
+                  value={pdfSettings.headerLabel ?? ''}
+                  onChange={e => update('headerLabel' as keyof PDFSettings, e.target.value as any)}
+                />
+              </div>
+            </div>
+          </SettingsSection>
 
           {/* 5.7 Colors */}
           <SettingsSection title="Colors" icon={

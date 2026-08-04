@@ -241,9 +241,8 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
   const parts: string[] = [];
 
   // ── Header bar ──────────────────────────────────────────────────────────────
-  const logoImg = logoDataUrl
-    ? `<img src="${logoDataUrl}" style="height:${layout.headerHeight - 2}mm;width:${layout.headerHeight - 2}mm;object-fit:cover;border-radius:50%;flex-shrink:0;background:white;" />`
-    : '';
+  const headerTitle = settings.headerTitle?.trim() || 'Siddhi';
+  const headerLabel = settings.headerLabel?.trim() || 'QUESTION BANK';
   parts.push(`
     <div class="running-header" style="
       position:fixed;
@@ -264,10 +263,9 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
       -webkit-print-color-adjust:exact;
       print-color-adjust:exact;
     ">
-      ${logoImg}
-      <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">Siddhi</span>
+      <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">${escHtml(headerTitle)}</span>
       <span style="flex:1;"></span>
-      <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">QUESTION BANK</span>
+      <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">${escHtml(headerLabel)}</span>
     </div>`);
 
   // ── Footer bar — social icons centered, page number in bottom-right ──────────

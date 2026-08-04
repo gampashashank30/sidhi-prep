@@ -54,7 +54,11 @@ export type TopicNode = {
 export type BorderStyle = 'solid' | 'double' | 'dashed';
 
 export type PDFSettings = {
-  // 5.0 Corner logo (4 corners of the page border)
+  // 5.0 Header text (editable in Step 3)
+  headerTitle?: string;        // left side italic text, default "Siddhi"
+  headerLabel?: string;        // right side small-caps label, default "QUESTION BANK"
+
+  // 5.0b Corner logo (4 corners of the page border)
   cornerLogoDataUrl?: string;  // custom corner logo image (base64). When undefined → uses default logo
 
   // 5.1 Watermark
