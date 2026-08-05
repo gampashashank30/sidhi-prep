@@ -13,9 +13,9 @@
 // - Ads are full-height flex containers with forced page breaks around them
 
 import type { Question, PDFSettings, CoverSettings } from './types';
-import { unescapeMarkdown, normalizeMathEquations, fixUnbalancedBraces } from './text';
+import { renderMath } from './mathRenderer';
+export { renderMath } from './mathRenderer';
 
-import katex from 'katex';
 import {
   PAGE_WIDTH_MM, PAGE_HEIGHT_MM,
   BORDER_INSET_MM, CONTENT_PADDING_MM, CORNER_ICON_SIZE_MM,
@@ -34,95 +34,6 @@ function escHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
-}
-
-// ─── Math-aware renderer (SERVER-SIDE via KaTeX) ──────────────────────────────────────
-// Detects all LaTeX delimiter styles, normalises double-backslash escaping,
-// cleans up Word OMML remnants, and renders each math fragment server-side with KaTeX.
-
-export function renderMath(raw: string): string {
-  if (!raw) return '';
-
-  // 1. Normalize Word OMML linear math markers (█, 〖, 〗, &@&)
-  const normalized = normalizeMathEquations(raw);
-
-  // 2. Strip markdown headings safely while preserving math delimiters
-  const text = normalized
-    .replace(/^\s*#{1,6}\s*/gm, '')
-    .replace(/\*\*(.+?)\*\*/gs, '$1');
-
-  const out: string[] = [];
-
-  // One-pass regex: match all four LaTeX delimiter styles in priority order
-  //   $$...$$ → block    (group 1)
-  //   $...$   → inline   (group 2)
-  //   \[...\] → block    (group 3)
-  //   \(...\) → inline   (group 4)
-  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
-  let lastIdx = 0;
-  let m: RegExpExecArray | null;
-
-  while ((m = mathRe.exec(text)) !== null) {
-    // Emit preceding plain text — unescape markdown before HTML-escaping
-    if (m.index > lastIdx) {
-      out.push(escHtml(unescapeMarkdown(text.slice(lastIdx, m.index))).replace(/\n/g, '<br/>'));
-    }
-
-    const isBlock = m[1] !== undefined || m[3] !== undefined;
-    let mathContent = (m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/\\\\(?=[a-zA-Z])/g, '\\');
-
-    // DO NOT force \displaystyle on inline math!
-    // Standard inline math (displayMode: false) ensures formulas fit standard
-    // line-height and baseline metrics without overlapping adjacent English text lines.
-
-    const katexOpts = {
-      throwOnError: true, // ALWAYS true so try...catch catches errors instead of rendering red error text
-      displayMode:  isBlock,
-      output:       'html' as const,
-      strict:       false,
-    };
-
-    // Pre-clean math content: balance braces & strip loose alignment ampersands
-    let mathContentCleaned = fixUnbalancedBraces(mathContent.replace(/(?:^|\s)&+/g, ' ').trim());
-
-    try {
-      out.push(katex.renderToString(mathContentCleaned, katexOpts));
-    } catch (e: any) {
-      // Retry 1: If mathContent contains alignment chars (& or \\), try wrapping in \begin{aligned}
-      if (mathContent.includes('&') || mathContent.includes('\\\\')) {
-        try {
-          const alignedContent = '\\begin{aligned}\n' + mathContent + '\n\\end{aligned}';
-          out.push(katex.renderToString(alignedContent, { ...katexOpts, displayMode: true }));
-          lastIdx = m.index + m[0].length;
-          continue;
-        } catch (e2) {
-          // Fall through
-        }
-      }
-
-      // Retry 2: Strip all ampersands entirely and retry
-      try {
-        const noAmp = mathContentCleaned.replace(/&/g, ' ');
-        out.push(katex.renderToString(noAmp, katexOpts));
-        lastIdx = m.index + m[0].length;
-        continue;
-      } catch (e3) {
-        // Fall through
-      }
-
-      // Final fallback: render neutral dark-styled math text (NEVER RED!)
-      out.push(`<span style="color:#1F1F1F;font-family:monospace;font-size:8.5pt;">${escHtml(mathContentCleaned)}</span>`);
-    }
-
-    lastIdx = m.index + m[0].length;
-  }
-
-  // Remaining plain text — unescape markdown before HTML-escaping
-  if (lastIdx < text.length) {
-    out.push(escHtml(unescapeMarkdown(text.slice(lastIdx))).replace(/\n/g, '<br/>'));
-  }
-
-  return out.join('');
 }
 
 // stripMarkdown is now handled inside renderMath above.

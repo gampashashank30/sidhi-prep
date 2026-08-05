@@ -5,8 +5,7 @@ import { useWizardStore } from '@/store/wizardStore';
 import { buildTopicTree } from '@/lib/topicTree';
 import type { TopicNode } from '@/lib/topicTree';
 import type { Question } from '@/lib/types';
-import { unescapeMarkdown } from '@/lib/text';
-import { renderMath } from '@/lib/pdfTemplate';
+import { renderMath } from '@/lib/mathRenderer';
 
 
 // ─── Math text component using KaTeX (matches final PDF rendering) ───────────
@@ -377,8 +376,12 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
             <span style={{
               background: 'var(--primary)', color: '#fff',
               fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px',
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
             }}>
-              Correct Answer: {q.answer}) {q.options[q.answer] ? renderMath(q.options[q.answer]) : ''}
+              Correct Answer: {q.answer}){' '}
+              {q.options[q.answer] && (
+                <span dangerouslySetInnerHTML={{ __html: renderMath(q.options[q.answer]) }} />
+              )}
             </span>
           </div>
 
