@@ -8,10 +8,30 @@ import type { Question } from '@/lib/types';
 import { renderMath } from '@/lib/mathRenderer';
 
 
-// ─── Math text component using KaTeX (matches final PDF rendering) ───────────
+// ─── Math text component using KaTeX (client-side only to avoid hydration issues) ──
 
 function MathText({ text, style, className }: { text: string; style?: React.CSSProperties; className?: string }) {
-  const html = useMemo(() => renderMath(text ?? ''), [text]);
+  const [html, setHtml] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (!text) { setHtml(''); return; }
+    try {
+      setHtml(renderMath(text));
+    } catch (e) {
+      // Fallback to plain text if renderMath throws
+      setHtml(text.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+    }
+  }, [text]);
+
+  // Before hydration: render plain text so SSR content matches
+  if (!html) {
+    return (
+      <span className={className} style={style}>
+        {text}
+      </span>
+    );
+  }
+
   return (
     <span
       className={className}
@@ -20,6 +40,7 @@ function MathText({ text, style, className }: { text: string; style?: React.CSSP
     />
   );
 }
+
 
 
 
@@ -295,28 +316,71 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
             </button>
           </div>
 
-          {/* Question text formatted with KaTeX math */}
-          <div style={{
-            fontSize: '0.8125rem', color: '#1f2937',
-            lineHeight: 1.55, margin: 0,
-            overflow: 'hidden',
-          }}>
-            <MathText text={q.text} />
-          </div>
+          {/* Question text or image-only indicator */}
+          {q.text ? (
+            <div style={{
+              fontSize: '0.8125rem', color: '#1f2937',
+              lineHeight: 1.55, margin: 0,
+              maxHeight: expanded ? 'none' : '3.5rem',
+              overflow: expanded ? 'visible' : 'hidden',
+              wordBreak: 'break-word',
+            }}>
+              <MathText text={q.text} />
+            </div>
+          ) : hasImages ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
+              <span style={{
+                fontSize: '0.6875rem', color: 'var(--text-2)', fontStyle: 'italic',
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+              }}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+                Image-based question
+                {!expanded && <span style={{ color: 'var(--primary)', fontStyle: 'normal', fontWeight: 600, fontSize: '0.6rem' }}> — click to preview</span>}
+              </span>
+              {!expanded && q.images![0] && (
+                <img
+                  src={q.images![0]}
+                  alt="Question"
+                  style={{
+                    height: '36px', width: 'auto', maxWidth: '100px',
+                    borderRadius: '3px', border: '1px solid var(--border)',
+                    objectFit: 'contain',
+                  }}
+                />
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-3)', fontStyle: 'italic', marginTop: '0.125rem' }}>
+              No question text
+            </div>
+          )}
 
           {/* Answer options preview formatted with KaTeX math */}
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
-            {(['A', 'B', 'C', 'D'] as const).map(opt => (
-              <span key={opt} style={{
-                fontSize: '0.6875rem', color: '#4b5563',
-                display: 'inline-flex', gap: '3px', alignItems: 'flex-start',
-                maxWidth: expanded ? '100%' : '180px',
-              }}>
-                <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
-                <MathText text={q.options[opt]} />
-              </span>
-            ))}
-          </div>
+          {(['A', 'B', 'C', 'D'] as const).some(opt => q.options[opt]) && (
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
+              {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                q.options[opt] ? (
+                  <span key={opt} style={{
+                    fontSize: '0.6875rem', color: '#4b5563',
+                    display: 'inline-flex', gap: '3px', alignItems: 'flex-start',
+                    maxWidth: expanded ? '100%' : '160px',
+                    overflow: 'hidden',
+                  }}>
+                    <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
+                    <MathText text={q.options[opt]} />
+                  </span>
+                ) : null
+              ))}
+            </div>
+          )}
+          {/* For image-only options (no text), show badge */}
+          {!(['A', 'B', 'C', 'D'] as const).some(opt => q.options[opt]) && hasOptImages && (
+            <div style={{ fontSize: '0.625rem', color: 'var(--text-3)', marginTop: '0.25rem', fontStyle: 'italic' }}>
+              Options: image-based (expand to view)
+            </div>
+          )}
         </div>
 
         {/* Selected indicator */}
