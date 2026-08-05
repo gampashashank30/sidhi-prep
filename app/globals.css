@@ -30,6 +30,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── KaTeX Math Formatting ─────────────────────────────────────────────────── */
+.katex {
+  font-size: 1.04em;
+  line-height: 1.2;
+  vertical-align: -0.06em;
+  margin: 0 1.5px;
+}
+.katex-display {
+  display: block;
+  margin: 0.4em 0 !important;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.katex-display .katex {
+  display: inline-block;
+  margin: 0;
+}
+
+
 /* ── Brand gradient header ──────────────────────────────────────────────────── */
 .brand-gradient {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, #1d7ad4 75%, #14B89A 100%);

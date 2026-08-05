@@ -6,6 +6,22 @@ import { buildTopicTree } from '@/lib/topicTree';
 import type { TopicNode } from '@/lib/topicTree';
 import type { Question } from '@/lib/types';
 import { unescapeMarkdown } from '@/lib/text';
+import { renderMath } from '@/lib/pdfTemplate';
+
+
+// ─── Math text component using KaTeX (matches final PDF rendering) ───────────
+
+function MathText({ text, style, className }: { text: string; style?: React.CSSProperties; className?: string }) {
+  const html = useMemo(() => renderMath(text ?? ''), [text]);
+  return (
+    <span
+      className={className}
+      style={style}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 
 
 // ─── Difficulty metadata ──────────────────────────────────────────────────────
@@ -184,110 +200,211 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
 }) {
   const diff = q.difficulty as Difficulty | undefined;
   const diffMeta = diff ? DIFF_META[diff] : null;
+  const [expanded, setExpanded] = useState(false);
+
+  const hasImages = q.images && q.images.length > 0;
+  const hasOptImages = q.optionImages && (q.optionImages.A || q.optionImages.B || q.optionImages.C || q.optionImages.D);
+  const hasExpImages = q.explanationImages && q.explanationImages.length > 0;
 
   return (
     <div
-      onClick={() => onToggle(q.number)}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: '0.625rem',
-        padding: '0.75rem 0.875rem',
         borderRadius: '0.625rem',
         border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
-        background: isSelected ? 'rgba(27,94,167,0.04)' : '#fff',
-        cursor: 'pointer',
+        background: isSelected ? 'rgba(27,94,167,0.03)' : '#fff',
         transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
         boxShadow: isSelected ? '0 0 0 3px rgba(27,94,167,0.08)' : 'none',
+        overflow: 'hidden',
       }}
     >
-      {/* Checkbox */}
-      <input
-        type="checkbox"
-        checked={isSelected}
-        onChange={() => onToggle(q.number)}
-        onClick={e => e.stopPropagation()}
+      <div
+        onClick={() => onToggle(q.number)}
         style={{
-          flexShrink: 0, marginTop: '0.25rem',
-          width: '1rem', height: '1rem',
-          cursor: 'pointer', accentColor: 'var(--primary)',
+          display: 'flex', alignItems: 'flex-start', gap: '0.625rem',
+          padding: '0.75rem 0.875rem',
+          cursor: 'pointer',
         }}
-      />
+      >
+        {/* Checkbox */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(q.number)}
+          onClick={e => e.stopPropagation()}
+          style={{
+            flexShrink: 0, marginTop: '0.25rem',
+            width: '1rem', height: '1rem',
+            cursor: 'pointer', accentColor: 'var(--primary)',
+          }}
+        />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Top metadata row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.3125rem', flexWrap: 'wrap' }}>
-          {/* Q number */}
-          <span style={{
-            fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0,
-            color: 'var(--primary)', background: 'rgba(27,94,167,0.12)',
-            padding: '1px 7px', borderRadius: '4px',
-          }}>
-            Q{displayNum}
-          </span>
-
-          {/* Difficulty pill */}
-          {diffMeta && (
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Top metadata row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.3125rem', flexWrap: 'wrap' }}>
+            {/* Q number */}
             <span style={{
-              fontSize: '0.625rem', fontWeight: 700, flexShrink: 0,
-              padding: '1px 6px', borderRadius: '9999px',
-              background: diffMeta.pillBg, color: diffMeta.pillText,
+              fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0,
+              color: 'var(--primary)', background: 'rgba(27,94,167,0.12)',
+              padding: '1px 7px', borderRadius: '4px',
             }}>
-              {diff}
+              Q{displayNum}
             </span>
-          )}
 
-          {/* Topic breadcrumb */}
-          {q.subjectPath.length > 0 && (
-            <span style={{
-              fontSize: '0.625rem', color: 'var(--text-3)',
-              overflow: 'hidden', textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-            }}>
-              {q.subjectPath.join(' › ')}
-            </span>
-          )}
-        </div>
-
-        {/* Question text — 2 line clamp */}
-        <p style={{
-          fontSize: '0.8125rem', color: '#1f2937',
-          lineHeight: 1.55, margin: 0,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical' as const,
-        }}>
-          {unescapeMarkdown(q.text)}
-        </p>
-
-        {/* Answer options preview — only first option shown on card */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
-          {(['A', 'B', 'C', 'D'] as const).map(opt => (
-            <span key={opt} style={{
-              fontSize: '0.625rem', color: '#6b7280',
-              display: 'flex', gap: '3px', alignItems: 'flex-start',
-              maxWidth: '120px',
-            }}>
-              <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {unescapeMarkdown(q.options[opt])}
+            {/* Difficulty pill */}
+            {diffMeta && (
+              <span style={{
+                fontSize: '0.625rem', fontWeight: 700, flexShrink: 0,
+                padding: '1px 6px', borderRadius: '9999px',
+                background: diffMeta.pillBg, color: diffMeta.pillText,
+              }}>
+                {diff}
               </span>
-            </span>
-          ))}
+            )}
+
+            {/* Topic breadcrumb */}
+            {q.subjectPath.length > 0 && (
+              <span style={{
+                fontSize: '0.625rem', color: 'var(--text-3)',
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+              }}>
+                {q.subjectPath.join(' › ')}
+              </span>
+            )}
+
+            {/* Expand preview button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(v => !v);
+              }}
+              style={{
+                fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)',
+                background: 'rgba(27,94,167,0.08)', border: 'none', borderRadius: '4px',
+                padding: '2px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px',
+                marginLeft: 'auto', flexShrink: 0,
+              }}
+            >
+              {expanded ? 'Hide Details' : 'Preview Math & Details'}
+              <svg
+                style={{ width: '10px', height: '10px', transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'none' }}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Question text formatted with KaTeX math */}
+          <div style={{
+            fontSize: '0.8125rem', color: '#1f2937',
+            lineHeight: 1.55, margin: 0,
+            overflow: 'hidden',
+          }}>
+            <MathText text={q.text} />
+          </div>
+
+          {/* Answer options preview formatted with KaTeX math */}
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
+            {(['A', 'B', 'C', 'D'] as const).map(opt => (
+              <span key={opt} style={{
+                fontSize: '0.6875rem', color: '#4b5563',
+                display: 'inline-flex', gap: '3px', alignItems: 'flex-start',
+                maxWidth: expanded ? '100%' : '180px',
+              }}>
+                <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
+                <MathText text={q.options[opt]} />
+              </span>
+            ))}
+          </div>
         </div>
+
+        {/* Selected indicator */}
+        {isSelected && (
+          <div style={{
+            flexShrink: 0, marginTop: '0.125rem',
+            width: '1.25rem', height: '1.25rem',
+            borderRadius: '50%',
+            background: 'var(--primary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </div>
+        )}
       </div>
 
-      {/* Selected indicator */}
-      {isSelected && (
+      {/* Expanded full details (matching PDF formatting) */}
+      {expanded && (
         <div style={{
-          flexShrink: 0, marginTop: '0.125rem',
-          width: '1.25rem', height: '1.25rem',
-          borderRadius: '50%',
-          background: 'var(--primary)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0.75rem 0.875rem 0.875rem 2.5rem',
+          borderTop: '1px solid #E2E8F0',
+          background: 'rgba(248, 250, 252, 0.7)',
+          fontSize: '0.78125rem',
         }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
+          {/* Question body images */}
+          {hasImages && (
+            <div style={{ margin: '0.5rem 0', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {q.images!.map((src, imgIdx) => (
+                <img key={imgIdx} src={src} alt={`Question diagram ${imgIdx+1}`} style={{ maxHeight: '120px', borderRadius: '4px', border: '1px solid #CBD5E1' }} />
+              ))}
+            </div>
+          )}
+
+          {/* Full Options Grid with images */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem',
+            margin: '0.5rem 0', padding: '0.5rem 0.75rem',
+            background: '#fff', borderRadius: '0.375rem', border: '1px solid #E2E8F0',
+          }}>
+            {(['A', 'B', 'C', 'D'] as const).map(opt => (
+              <div key={opt} style={{ display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
+                <strong style={{ color: 'var(--primary)', flexShrink: 0 }}>{opt})</strong>
+                <div>
+                  <MathText text={q.options[opt]} />
+                  {q.optionImages?.[opt] && (
+                    <img src={q.optionImages[opt]} alt={`Option ${opt}`} style={{ maxHeight: '60px', marginTop: '2px', display: 'block', borderRadius: '4px' }} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Correct Answer Badge */}
+          <div style={{ margin: '0.5rem 0 0.375rem 0' }}>
+            <span style={{
+              background: 'var(--primary)', color: '#fff',
+              fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px',
+            }}>
+              Correct Answer: {q.answer}) {q.options[q.answer] ? renderMath(q.options[q.answer]) : ''}
+            </span>
+          </div>
+
+          {/* Full Explanation section */}
+          <div style={{
+            marginTop: '0.5rem', padding: '0.5rem 0.75rem',
+            background: '#fff', borderRadius: '0.375rem', border: '1px solid #E2E8F0', borderLeft: '3px solid var(--accent)',
+          }}>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Explanation
+            </div>
+            {q.explanation ? (
+              <div style={{ color: '#334155', lineHeight: 1.6 }}>
+                <MathText text={q.explanation} />
+              </div>
+            ) : (
+              <div style={{ color: '#94A3B8', fontStyle: 'italic' }}>No explanation available</div>
+            )}
+            {hasExpImages && (
+              <div style={{ marginTop: '0.375rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {q.explanationImages!.map((src, imgIdx) => (
+                  <img key={imgIdx} src={src} alt={`Solution diagram ${imgIdx+1}`} style={{ maxHeight: '120px', borderRadius: '4px', border: '1px solid #CBD5E1' }} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -302,13 +419,8 @@ function PassageBanner({ q }: { q: Question }) {
   const [startQ, endQ] = q.groupRange;
   const label = `Direction \u2014 Q${startQ}\u2013${endQ}`;
 
-  // Unescape markdown escapes so blanks (\_ → _) display correctly, matching the PDF output
-  const displayText = unescapeMarkdown(q.passageText);
-
-  // Show a short preview (first 200 chars) when collapsed
-  const preview = displayText.length > 200
-    ? displayText.slice(0, 200).trimEnd() + '\u2026'
-    : displayText;
+  const text = q.passageText;
+  const preview = text.length > 200 ? text.slice(0, 200).trimEnd() + '\u2026' : text;
 
   return (
     <div style={{
@@ -347,17 +459,18 @@ function PassageBanner({ q }: { q: Question }) {
         </button>
       </div>
 
-      {/* Passage text */}
-      <p style={{
+      {/* Passage text formatted with KaTeX math */}
+      <div style={{
         fontSize: '0.75rem', color: '#374151', lineHeight: 1.6,
-        margin: '0.4rem 0 0 0', whiteSpace: 'pre-wrap',
+        margin: '0.4rem 0 0 0',
         wordBreak: 'break-word',
       }}>
-        {expanded ? displayText : preview}
-      </p>
+        <MathText text={expanded ? text : preview} />
+      </div>
     </div>
   );
 }
+
 
 
 // ─── Step 2 Main Component ────────────────────────────────────────────────────
