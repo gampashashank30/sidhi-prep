@@ -229,6 +229,7 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
   return (
     <div
       style={{
+        flexShrink: 0,
         borderRadius: '0.625rem',
         border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
         background: isSelected ? 'rgba(27,94,167,0.03)' : '#fff',
@@ -491,6 +492,7 @@ function PassageBanner({ q }: { q: Question }) {
 
   return (
     <div style={{
+      flexShrink: 0,
       borderRadius: '0.625rem',
       border: '1.5px solid rgba(27,94,167,0.25)',
       borderLeft: '3.5px solid var(--primary)',

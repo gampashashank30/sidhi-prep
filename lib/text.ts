@@ -111,37 +111,35 @@ export function fixUnbalancedBraces(s: string): string {
 function autoWrapBareMath(text: string): string {
   if (!text) return text;
 
-  // Process line by line to ensure multiline equations stay separated
-  return text
+  // 1. Protect all existing delimited math blocks ($...$, $$...$$, \[...\], \(...\)) multiline-safe
+  const placeholders: string[] = [];
+  const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
+
+  let protectedText = text.replace(mathRe, (match) => {
+    placeholders.push(match);
+    return `___MATH_TOKEN_${placeholders.length - 1}___`;
+  });
+
+  // 2. Un-escape stray brackets from docx converter: \[361-6pq\] -> [361-6pq] (outside math blocks)
+  protectedText = protectedText.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+
+  // 3. Process line-by-line for bare LaTeX commands and bare equations
+  const processedText = protectedText
     .split('\n')
     .map((line) => {
       const trimmedLine = line.trim();
       if (!trimmedLine) return line;
 
-      // 1. Protect existing delimited math blocks
-      const placeholders: string[] = [];
-      const mathRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([^)]+?)\\\)/g;
-
-      let protectedText = line.replace(mathRe, (match) => {
-        placeholders.push(match);
-        return `___MATH_TOKEN_${placeholders.length - 1}___`;
-      });
-
-      // Un-escape stray brackets from docx converter: \[361-6pq\] -> [361-6pq]
-      protectedText = protectedText.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
-
-      // 2. Wrap bare LaTeX commands (e.g. \sqrt{3}, \frac{1}{2}, \times, \div, \pm, \le, \ge, \neq, \therefore, \Delta)
+      // Wrap bare LaTeX commands (e.g. \sqrt{3}, \frac{1}{2}, \times, \div, \pm, \le, \ge, \neq, \therefore, \Delta)
       const bareCmdRe = /\\(?:sqrt|frac|vec|overline|begin|end|alpha|beta|theta|pi|pm|infty|le|ge|neq|times|div|cdot|sum|int|therefore|because|Delta)(?:\{[^{}]*\}|\[[^[\]]*\])*/g;
-
-      protectedText = protectedText.replace(bareCmdRe, (match) => {
+      let l = line.replace(bareCmdRe, (match) => {
         const trimmed = fixUnbalancedBraces(match.trim());
         return `$${trimmed}$`;
       });
 
-      // 3. Wrap standalone math equations (e.g. x^2 + 17x - 168 = 0, (x - 7)(x + 24) = 0, 84 = 1/2 * (17+x) * x)
+      // Wrap standalone math equations (e.g. x^2 + 17x - 168 = 0, (x - 7)(x + 24) = 0, 84 = 1/2 * (17+x) * x)
       const bareEqRe = /(?:^|\s)((?:[a-zA-Z0-9()]+(?:\^[0-9a-zA-Z]+|\/[0-9a-zA-Z]+)?\s*[-+*=:\/]\s*)+[a-zA-Z0-9().]+)(?=\s|$)/g;
-
-      protectedText = protectedText.replace(bareEqRe, (match, eqGroup) => {
+      l = l.replace(bareEqRe, (match, eqGroup) => {
         const trimmed = eqGroup.trim();
         // Only wrap if it contains explicit math operators (^, =, +, -, \sqrt, etc.) and isn't plain words
         if (/[\^=]/.test(trimmed) || (/\/|\*/.test(trimmed) && /\d/.test(trimmed))) {
@@ -150,12 +148,14 @@ function autoWrapBareMath(text: string): string {
         return match;
       });
 
-      // 4. Restore protected math blocks
-      return protectedText.replace(/___MATH_TOKEN_(\d+)___/g, (_, idx) => {
-        return placeholders[Number(idx)];
-      });
+      return l;
     })
     .join('\n');
+
+  // 4. Restore protected math blocks
+  return processedText.replace(/___MATH_TOKEN_(\d+)___/g, (_, idx) => {
+    return placeholders[Number(idx)];
+  });
 }
 
 /**
