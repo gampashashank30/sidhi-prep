@@ -798,6 +798,9 @@ export interface TemplateOptions {
   previewMode?: boolean;
   previewQuestionIndex?: number;
   analyticsCharts?: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean };
+  /** When true, topic-section headings are NOT rendered in the question body.
+   *  Use this when questions are randomly segregated so heading-spam is avoided. */
+  suppressTopicHeadings?: boolean;
 }
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
@@ -1160,7 +1163,8 @@ function renderAnalyticsPage(
 
 export function buildHTMLTemplate(opts: TemplateOptions): string {
   const { questions, coverSettings, logoDataUrl, settings,
-          previewMode = false, previewQuestionIndex = 0 } = opts;
+          previewMode = false, previewQuestionIndex = 0,
+          suppressTopicHeadings = false } = opts;
 
   const layout = computeLayout(settings);
   const flatTopics = buildFlatTopicList(questions);
@@ -1210,11 +1214,14 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     const displayNumber = qi + 1; // Sequential 1-based display number regardless of original q.number
     const topicKey = q.subjectPath.join('|||');
 
-    if (topicKey !== prevTopicKey) {
+    if (!suppressTopicHeadings && topicKey !== prevTopicKey) {
       // Only render a topic heading when this question has a non-empty subject path
       if (q.subjectPath.length > 0) {
         sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
       }
+      prevTopicKey = topicKey;
+    } else if (suppressTopicHeadings) {
+      // Still track prevTopicKey so the logic stays consistent but headings are suppressed
       prevTopicKey = topicKey;
     }
 

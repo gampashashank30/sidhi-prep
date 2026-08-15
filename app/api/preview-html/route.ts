@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       questions: Question[];
       coverSettings: CoverSettings | null;
       settings: PDFSettings;
+      suppressTopicHeadings?: boolean;
       previewQuestionIndex?: number;
     };
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       coverSettings: body.coverSettings,
       logoDataUrl,
       settings: body.settings,
+      suppressTopicHeadings: body.suppressTopicHeadings,
       previewMode: true,
       previewQuestionIndex: body.previewQuestionIndex ?? 0,
     });

@@ -15,6 +15,9 @@ interface WizardState {
   // Step 2
   coverSettings: CoverSettings | null;
   selectedQuestionNumbers: number[];
+  /** When true, selected questions are shuffled randomly in the output PDF.
+   *  When false (default), they appear in their original topic-wise order. */
+  randomSegregation: boolean;
 
   // Step 3
   pdfSettings: PDFSettings;
@@ -28,6 +31,7 @@ interface WizardState {
   toggleQuestion: (number: number) => void;
   selectAllQuestions: () => void;
   deselectAllQuestions: () => void;
+  setRandomSegregation: (value: boolean) => void;
   updatePdfSettings: (partial: Partial<PDFSettings>) => void;
   resetPdfSettings: () => void;
 
@@ -45,6 +49,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   // Step 2
   coverSettings: null,
   selectedQuestionNumbers: [],
+  randomSegregation: false,
 
   // Step 3
   pdfSettings: { ...DEFAULT_PDF_SETTINGS },
@@ -92,6 +97,8 @@ export const useWizardStore = create<WizardState>((set, get) => ({
 
   deselectAllQuestions: () => set({ selectedQuestionNumbers: [] }),
 
+  setRandomSegregation: (value) => set({ randomSegregation: value }),
+
   updatePdfSettings: (partial) => set((state) => ({
     pdfSettings: { ...state.pdfSettings, ...partial },
   })),
@@ -101,9 +108,17 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   // ── Derived ──────────────────────────────────────────────────────────────
 
   getSelectedQuestions: () => {
-    const { parseResult, selectedQuestionNumbers } = get();
+    const { parseResult, selectedQuestionNumbers, randomSegregation } = get();
     if (!parseResult) return [];
     const sel = new Set(selectedQuestionNumbers);
-    return parseResult.questions.filter(q => sel.has(q.number));
+    const ordered = parseResult.questions.filter(q => sel.has(q.number));
+    if (!randomSegregation) return ordered;
+    // Fisher-Yates shuffle (new array, never mutates store state)
+    const shuffled = [...ordered];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   },
 }));

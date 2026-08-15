@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       questions: Question[];
       coverSettings: CoverSettings | null;
       settings: PDFSettings;
+      suppressTopicHeadings?: boolean;
       analyticsCharts?: { donut: boolean; pie: boolean; column: boolean; breakdown: boolean };
     };
 
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       coverSettings: body.coverSettings,
       logoDataUrl,
       settings: body.settings,
+      suppressTopicHeadings: body.suppressTopicHeadings,
       analyticsCharts: body.analyticsCharts,
     });
 

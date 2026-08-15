@@ -788,7 +788,7 @@ export default function Step3Customize() {
   const {
     pdfSettings, updatePdfSettings,
     coverSettings, getSelectedQuestions,
-    setStep,
+    setStep, randomSegregation,
   } = useWizardStore();
 
   const [generating, setGenerating] = useState(false);
@@ -859,6 +859,7 @@ export default function Step3Customize() {
       questions: selectedQuestions,
       coverSettings,
       settings: pdfSettings,
+      suppressTopicHeadings: randomSegregation,
       analyticsCharts: analyticsEnabled
         ? { donut: showDonut, pie: false, column: false, breakdown: showBreakdown }
         : undefined,

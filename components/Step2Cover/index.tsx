@@ -548,7 +548,7 @@ export default function Step2Cover() {
   const {
     parseResult, selectedQuestionNumbers,
     setSelectedQuestions, selectAllQuestions, deselectAllQuestions,
-    setStep,
+    setStep, randomSegregation, setRandomSegregation,
   } = useWizardStore();
 
   const questions = parseResult?.questions ?? [];
@@ -720,7 +720,56 @@ export default function Step2Cover() {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '0.375rem' }}>
+        <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+          {/* ── Random Segregation Toggle ─────────────────────────────── */}
+          <button
+            onClick={() => setRandomSegregation(!randomSegregation)}
+            title={randomSegregation ? 'Random Segregation ON — click to switch to Topic-wise order' : 'Topic-wise order — click to enable Random Segregation'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              fontSize: '0.75rem', fontWeight: 600,
+              padding: '0.25rem 0.75rem', borderRadius: '0.5rem',
+              border: `1.5px solid ${randomSegregation ? 'var(--primary)' : 'var(--border)'}`,
+              background: randomSegregation ? 'var(--primary)' : '#fff',
+              color: randomSegregation ? '#fff' : 'var(--text-2)',
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {/* Shuffle icon */}
+            <svg
+              style={{ width: '0.8rem', height: '0.8rem', flexShrink: 0 }}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            {/* Inline toggle pill */}
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center',
+                width: '2rem', height: '1rem',
+                borderRadius: '9999px',
+                background: randomSegregation ? 'rgba(255,255,255,0.35)' : '#d1d5db',
+                position: 'relative', flexShrink: 0,
+                transition: 'background 0.18s',
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  left: randomSegregation ? 'calc(100% - 0.875rem)' : '0.1rem',
+                  width: '0.75rem', height: '0.75rem',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  transition: 'left 0.18s ease',
+                }}
+              />
+            </span>
+            Random Segregation
+          </button>
+
           <button
             className="btn-ghost"
             style={{ fontSize: '0.75rem', padding: '0.25rem 0.875rem', borderRadius: '0.5rem' }}
