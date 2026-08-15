@@ -664,11 +664,18 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     ? ''
     : 'break-inside:avoid;page-break-inside:avoid;';
 
+  // When there are no solution images the outer box must be transparent so the
+  // watermark (position:fixed, z-index:1) shows through it.  z-index:2 must stay
+  // so text paints above the watermark — but an opaque background would cover it.
+  // When solution images ARE present keep a subtle fill so images stay readable
+  // (user: "if the solution contains any image then it's okay no need to appear").
+  const outerBg = hasExpImages ? 'background:#FAFBFC;' : 'background:transparent;';
+
   return `<a id="exp-${q.number}" name="exp-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     ${breakStyle}
     border:1px solid #E0E5EA;border-radius:6px;
     padding:9px 11px;margin-bottom:9px;
-    background:#FAFBFC;
+    ${outerBg}
     position:relative;z-index:2;
   ">
     <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${displayNumber} — Explanation</div>
