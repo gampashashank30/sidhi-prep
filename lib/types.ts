@@ -72,11 +72,12 @@ export type PDFSettings = {
   borderStyle: BorderStyle;
   borderWidthMm: number;  // 1–6
 
-  // 5.3 Badges
+  // 5.3 Badges & Sections
   difficultyBadgeEnabled: boolean;
   topicBadgeEnabled: boolean;
   showAnswer: boolean;           // show/hide the "Ans: X" badge on each question
   includeExplanations: boolean;  // include the full explanations section in the PDF
+  indexPageEnabled: boolean;     // include Table of Contents / Index page in the PDF
 
   // 5.5 Social links
   socialLinks: {

@@ -1198,10 +1198,12 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // 1. Cover page
   sections.push(renderCoverSection(coverSettings, layout));
 
-  // 2. Table of Contents
-  sections.push(`<div style="break-before:page;page-break-before:always;">
-    ${renderTOC(flatTopics, primaryColor, accentColor)}
-  </div>`);
+  // 2. Table of Contents / Index Page — conditional on settings.indexPageEnabled
+  if (settings.indexPageEnabled !== false && flatTopics.length > 0) {
+    sections.push(`<div style="break-before:page;page-break-before:always;">
+      ${renderTOC(flatTopics, primaryColor, accentColor)}
+    </div>`);
+  }
 
   // 2b. Analytics page (if any charts enabled)
   const analyticsCharts = opts.analyticsCharts;

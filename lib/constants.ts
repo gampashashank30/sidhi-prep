@@ -43,6 +43,7 @@ export const DEFAULT_PDF_SETTINGS = {
   topicBadgeEnabled: true,
   showAnswer: true,
   includeExplanations: true,
+  indexPageEnabled: true,
   socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '', appStore: '', microsoftStore: '' },
   adPdf: undefined,
   primaryColor: DEFAULT_PRIMARY,
