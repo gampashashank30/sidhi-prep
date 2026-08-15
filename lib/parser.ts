@@ -46,7 +46,7 @@ const RE_ANY_OPT   = /^(?:\*\*|\*|__|_)?[A-E]\./;       // generic option-like l
 const RE_ANSWER    = /^(?:\*\*|\*|__|_)?(?:Ans(?:wer)?)[:.\s]\s*(?:\*\*|\*|__|_)?([A-D])(?:\*\*|\*|__|_)?\s*$/i;
 const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
-const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?(Easy|Medium|Hard)(?:\*\*|\*|__|_)?\s*$/i;
+const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?([A-Za-z\s]+)(?:\*\*|\*|__|_)?\s*$/i;
 
 // Direction / passage block header — all syntax variants (case-insensitive):
 //   D.1-5) | Direc.1-5) | Directions.1-5) | Dir.1-5) | Direction (Q1-5) | D 1-5)
@@ -64,11 +64,19 @@ function parseSubjectPath(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-function normalizeDifficulty(raw: string): 'Easy' | 'Medium' | 'Hard' {
-  const map: Record<string, 'Easy' | 'Medium' | 'Hard'> = {
-    easy: 'Easy', medium: 'Medium', hard: 'Hard',
-  };
-  return map[raw.toLowerCase()];
+function normalizeDifficulty(raw: string): 'Easy' | 'Medium' | 'Hard' | null {
+  if (!raw) return null;
+  const clean = raw.trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (['easy', 'eazy', 'ez', 'eas'].includes(clean)) {
+    return 'Easy';
+  }
+  if (['medium', 'meidum', 'medum', 'med', 'mod', 'moderate'].includes(clean)) {
+    return 'Medium';
+  }
+  if (['hard', 'difficult', 'tough'].includes(clean)) {
+    return 'Hard';
+  }
+  return null;
 }
 
 // ─── Main parser ─────────────────────────────────────────────────────────────
@@ -241,9 +249,12 @@ export function parseQuestions(
       i++;
     }
 
-    // ── Parse Exp: (optional — absent or empty keeps question with explanation='') ─────────────
+    // ── Metadata variables for this question ─────────────────────────────────
     let explanation = '';
     let explanationImages: string[] = [];
+    let subjectPath: string[] = [];
+    let difficulty: 'Easy' | 'Medium' | 'Hard' | null = null;
+
     if (i < paragraphs.length && RE_EXPLANATION.test(paragraphs[i])) {
       // Exp: heading found — collect text
       const m = paragraphs[i].match(RE_EXPLANATION)!;
@@ -264,6 +275,27 @@ export function parseQuestions(
       explanationImages = extractImages(explanation, imageMap);
       explanation = stripImageTokens(explanation);
       explanation = explanation.trim();
+
+      // Check if Subject: was appended inline inside the explanation (e.g. without a newline)
+      if (/(?:^|\s)Subject:/i.test(explanation)) {
+        const subjectIndex = explanation.search(/(?:^|\s)Subject:/i);
+        const afterSubject = explanation.substring(subjectIndex).replace(/^(?:\s*)Subject:\s*/i, '');
+        explanation = explanation.substring(0, subjectIndex).trim();
+
+        // Also check if Difficulty: was appended after Subject on that same line
+        if (/(?:^|\s)Difficulty:/i.test(afterSubject)) {
+          const diffIndex = afterSubject.search(/(?:^|\s)Difficulty:/i);
+          const rawSubj = afterSubject.substring(0, diffIndex).trim();
+          const rawDiff = afterSubject.substring(diffIndex).replace(/^(?:\s*)Difficulty:\s*/i, '').trim();
+          subjectPath = parseSubjectPath(rawSubj);
+          if (!difficulty) {
+            difficulty = normalizeDifficulty(rawDiff);
+          }
+        } else {
+          subjectPath = parseSubjectPath(afterSubject.trim());
+        }
+      }
+
       // Empty explanation stored as '' — PDF renders "No explanation available"
       if (!explanation) {
         errors.push({
@@ -281,10 +313,19 @@ export function parseQuestions(
 
 
     // ── Parse Subject: (optional — missing/empty subject keeps question in PDF without topic grouping)
-    let subjectPath: string[] = [];
     if (i < paragraphs.length && RE_SUBJECT.test(paragraphs[i])) {
       const m = paragraphs[i].match(RE_SUBJECT)!;
-      subjectPath = parseSubjectPath(m[1]);
+      let rawSubj = m[1];
+      // Check if Difficulty: is attached to the same Subject: line
+      if (/(?:^|\s)Difficulty:/i.test(rawSubj)) {
+        const diffIndex = rawSubj.search(/(?:^|\s)Difficulty:/i);
+        const rawDiff = rawSubj.substring(diffIndex).replace(/^(?:\s*)Difficulty:\s*/i, '').trim();
+        rawSubj = rawSubj.substring(0, diffIndex).trim();
+        if (!difficulty) {
+          difficulty = normalizeDifficulty(rawDiff);
+        }
+      }
+      subjectPath = parseSubjectPath(rawSubj);
       i++;
       if (subjectPath.length === 0) {
         // Subject line present but empty/unparseable — soft warning, question still emitted
@@ -293,8 +334,8 @@ export function parseQuestions(
           message: `Q${qNumber}: Subject: field is empty — question will appear without a topic heading or badge.`,
         });
       }
-    } else {
-      // No Subject: line at all — soft warning, question still emitted without topic info
+    } else if (subjectPath.length === 0) {
+      // No Subject: line at all and not extracted inline — soft warning
       errors.push({
         questionNumber: qNumber,
         message: `Q${qNumber}: Subject: line is missing — question will appear without a topic heading or badge.`,
@@ -302,12 +343,16 @@ export function parseQuestions(
     }
 
     // ── Parse Difficulty: (optional — missing difficulty keeps question in PDF without a badge)
-    let difficulty: 'Easy' | 'Medium' | 'Hard' | null = null;
     if (i < paragraphs.length && RE_DIFFICULTY.test(paragraphs[i])) {
       const m = paragraphs[i].match(RE_DIFFICULTY)!;
-      difficulty = normalizeDifficulty(m[1]);
+      const parsedDiff = normalizeDifficulty(m[1]);
+      if (parsedDiff) {
+        difficulty = parsedDiff;
+      }
       i++;
-    } else {
+    }
+
+    if (!difficulty) {
       // No valid Difficulty: line — soft warning, question still emitted without difficulty badge
       errors.push({
         questionNumber: qNumber,
