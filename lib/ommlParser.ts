@@ -321,6 +321,42 @@ async function extractImages(
 ): Promise<Record<string, string>> {
   const imageMap: Record<string, string> = {};
 
+  // ── Lazy-load sharp once ────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sharpFn: ((input: Buffer) => any) | null = null;
+  try {
+    const sharpMod = await import('sharp');
+    // sharp's default export is the constructor function itself
+    sharpFn = (sharpMod.default ?? sharpMod) as (input: Buffer) => any;
+  } catch {
+    // sharp not available (e.g. edge runtime) — fall back to raw base64
+  }
+
+  /**
+   * Compress an image buffer to JPEG (max 800px, quality 75).
+   * Falls back to the original raw base64 when sharp is unavailable or the
+   * format cannot be decoded (e.g. EMF/WMF vector files).
+   */
+  async function compressToBase64(rawBuffer: Buffer, mimeType: string): Promise<string> {
+    // EMF / WMF are Windows vector formats — sharp cannot decode them, keep raw
+    if (mimeType === 'image/emf' || mimeType === 'image/wmf') {
+      return `data:${mimeType};base64,${rawBuffer.toString('base64')}`;
+    }
+    if (!sharpFn) {
+      return `data:${mimeType};base64,${rawBuffer.toString('base64')}`;
+    }
+    try {
+      const compressed = await sharpFn(rawBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 75, progressive: true })
+        .toBuffer();
+      return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+    } catch {
+      // Unsupported format (e.g. SVG with complex features) — fall back to raw
+      return `data:${mimeType};base64,${rawBuffer.toString('base64')}`;
+    }
+  }
+
   for (const [rId, relTarget] of Object.entries(relsMap)) {
     // relTarget is like "media/image1.png" — full path in zip is "word/media/image1.png"
     const zipPath = relTarget.startsWith('word/') ? relTarget : `word/${relTarget}`;
@@ -329,14 +365,14 @@ async function extractImages(
       // Try without the "word/" prefix too (some DOCX pack differently)
       const altFile = zip.file(relTarget);
       if (!altFile) continue;
-      const data = await altFile.async('base64');
+      const rawBuf = Buffer.from(await altFile.async('arraybuffer'));
       const mime = getMimeType(relTarget);
-      imageMap[rId] = `data:${mime};base64,${data}`;
+      imageMap[rId] = await compressToBase64(rawBuf, mime);
       continue;
     }
-    const data = await imageFile.async('base64');
+    const rawBuf = Buffer.from(await imageFile.async('arraybuffer'));
     const mime = getMimeType(zipPath);
-    imageMap[rId] = `data:${mime};base64,${data}`;
+    imageMap[rId] = await compressToBase64(rawBuf, mime);
   }
 
   return imageMap;
