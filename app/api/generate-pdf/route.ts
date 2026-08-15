@@ -18,8 +18,11 @@ export const config = {
   },
 };
 
-// Pre-warm browser in the background when route module loads
-prewarmBrowser();
+// NOTE: prewarmBrowser() intentionally removed.
+// On Render free tier (512 MB RAM), launching Chromium eagerly at server boot
+// pushed memory over the limit and crashed the process on any concurrent request.
+// Chromium now launches lazily on the first /api/generate-pdf call (~3-5s slower
+// for the very first PDF, but the server stays stable the rest of the time).
 
 let cachedLogoDataUrl: string | null = null;
 
