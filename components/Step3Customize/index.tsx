@@ -1365,23 +1365,26 @@ export default function Step3Customize() {
             {pdfSettings.adPdf && (
               <div className="mt-4">
                 <label className="form-label" htmlFor="ad-page-interval">
-                  Insert ad after every
+                  Insert ad after every <span className="text-gray-400 font-normal">(pages)</span>
                 </label>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {[1, 2, 3, 4, 5, 7, 10].map(n => (
-                    <button
-                      key={n}
-                      id={n === 1 ? 'ad-page-interval' : undefined}
-                      onClick={() => update('adPdf', { ...pdfSettings.adPdf!, pageInterval: n })}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                        pdfSettings.adPdf?.pageInterval === n
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-                      }`}
-                    >
-                      {n} {n === 1 ? 'page' : 'pages'}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-3 mt-1">
+                  <input
+                    id="ad-page-interval"
+                    type="number"
+                    min={1}
+                    max={9999}
+                    step={1}
+                    value={pdfSettings.adPdf.pageInterval}
+                    onChange={e => {
+                      const val = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                      update('adPdf', { ...pdfSettings.adPdf!, pageInterval: val });
+                    }}
+                    className="form-input w-28 text-center font-semibold text-base"
+                    placeholder="e.g. 5"
+                  />
+                  <span className="text-sm text-gray-500 font-medium">
+                    page{pdfSettings.adPdf.pageInterval !== 1 ? 's' : ''}
+                  </span>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
                   The full ad PDF is inserted after every {pdfSettings.adPdf.pageInterval} page{pdfSettings.adPdf.pageInterval > 1 ? 's' : ''} of content.
