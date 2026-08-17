@@ -59,6 +59,7 @@ export type PDFSettings = {
   headerLabel?: string;        // right side small-caps label, default "QUESTION BANK"
 
   // 5.0b Corner logo (4 corners of the page border)
+  cornerLogoEnabled: boolean;  // show or hide corner logo circles
   cornerLogoDataUrl?: string;  // custom corner logo image (base64). When undefined → uses default logo
 
   // 5.1 Watermark

@@ -223,7 +223,17 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     // Use custom corner logo from settings if provided, else fall back to app logo
     const cornerLogoSrc = settings.cornerLogoDataUrl ?? logoDataUrl;
 
-    const logoEl = cornerLogoSrc
+    // Build the corner element — skip logo entirely if cornerLogoEnabled is false
+    const logoEl = !settings.cornerLogoEnabled
+      ? `<div style="
+          width:${cs}mm;height:${cs}mm;
+          border-radius:50%;
+          background:${primaryColor};
+          border:2px solid ${borderColor};
+          display:flex;align-items:center;justify-content:center;
+          -webkit-print-color-adjust:exact;print-color-adjust:exact;
+        "></div>`
+      : cornerLogoSrc
       ? `<div style="
           width:${cs}mm;height:${cs}mm;
           border-radius:50%;

@@ -36,6 +36,7 @@ export const DEFAULT_PDF_SETTINGS = {
   watermarkEnabled: true,
   watermarkOpacity: WATERMARK_OPACITY,
   borderEnabled: true,
+  cornerLogoEnabled: true,
   borderColor: DEFAULT_PRIMARY,
   borderStyle: 'solid' as const,
   borderWidthMm: 2,

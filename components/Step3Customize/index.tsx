@@ -1186,13 +1186,26 @@ export default function Step3Customize() {
 
                 {/* Corner Logo */}
                 <div style={{ marginTop: '0.5rem', padding: '0.875rem', background: 'rgba(99,102,241,0.04)', borderRadius: '0.75rem', border: '1px solid rgba(99,102,241,0.1)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: pdfSettings.cornerLogoEnabled ? '0.5rem' : 0 }}>
                     <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--primary)', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                     </svg>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151' }}>Corner Logo</span>
-                    <span style={{ fontSize: '0.68rem', color: '#94A3B8', marginLeft: '0.25rem' }}>appears in all 4 corners of the border</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151', flex: 1 }}>Corner Logo</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>appears in all 4 corners of the border</span>
+                    {/* Toggle */}
+                    <button
+                      id="toggle-corner-logo"
+                      role="switch"
+                      aria-checked={pdfSettings.cornerLogoEnabled}
+                      className={`toggle-switch ${pdfSettings.cornerLogoEnabled ? 'on' : 'off'}`}
+                      style={{ flexShrink: 0, marginLeft: '0.5rem' }}
+                      onClick={() => update('cornerLogoEnabled' as keyof PDFSettings, !pdfSettings.cornerLogoEnabled as any)}
+                    >
+                      <span className={`toggle-thumb ${pdfSettings.cornerLogoEnabled ? 'on' : 'off'}`} />
+                    </button>
                   </div>
+                  {pdfSettings.cornerLogoEnabled && (
+                    <>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.375rem', marginBottom: '0.625rem', padding: '0.5rem 0.625rem', background: 'rgba(99,102,241,0.07)', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.18)' }}>
                     <svg style={{ width: '0.875rem', height: '0.875rem', color: '#6366F1', flexShrink: 0, marginTop: '0.1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
@@ -1241,6 +1254,8 @@ export default function Step3Customize() {
                       reader.readAsDataURL(file);
                       e.target.value = '';
                     }} />
+                    </>
+                  )}
                 </div>
               </div>
             )}
