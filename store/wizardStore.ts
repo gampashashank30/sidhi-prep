@@ -111,10 +111,25 @@ export const useWizardStore = create<WizardState>((set, get) => ({
     const { parseResult, selectedQuestionNumbers, randomSegregation } = get();
     if (!parseResult) return [];
     const sel = new Set(selectedQuestionNumbers);
-    const ordered = parseResult.questions.filter(q => sel.has(q.number));
-    if (!randomSegregation) return ordered;
-    // Fisher-Yates shuffle (new array, never mutates store state)
-    const shuffled = [...ordered];
+    const filtered = parseResult.questions.filter(q => sel.has(q.number));
+
+    if (!randomSegregation) {
+      // Topic-wise order: sort by the full subjectPath so all questions
+      // belonging to the same topic are adjacent. This ensures that topic
+      // headings in the PDF are contiguous and that index-page anchor links
+      // (e.g. clicking "Humanity") land on a single grouped block.
+      return [...filtered].sort((a, b) => {
+        const aKey = a.subjectPath.join('\x00');
+        const bKey = b.subjectPath.join('\x00');
+        if (aKey < bKey) return -1;
+        if (aKey > bKey) return 1;
+        // Within the same topic, preserve original document order
+        return a.number - b.number;
+      });
+    }
+
+    // Random Segregation ON — Fisher-Yates shuffle (new array, never mutates store state)
+    const shuffled = [...filtered];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
