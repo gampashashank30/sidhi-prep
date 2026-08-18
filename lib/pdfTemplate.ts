@@ -644,6 +644,25 @@ function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: 
   </h2>`;
 }
 
+// ─── Topic anchor-only (no visible heading) ───────────────────────────────────
+// Emits invisible zero-height <a> anchors for every slug in the path so that
+// TOC links still resolve even when the visual heading block is suppressed
+// (e.g. when topicBadgeEnabled === false or questions are randomly shuffled).
+
+function renderTopicAnchorsOnly(path: string[], emittedSlugs: Set<string>): string {
+  const anchorSpans: string[] = [];
+  // Emit anchors for ALL depths (prefix slugs + full slug)
+  for (let d = 1; d <= path.length; d++) {
+    const prefixPath = path.slice(0, d);
+    const prefixSlug = slugify(prefixPath);
+    if (!emittedSlugs.has(prefixSlug)) {
+      emittedSlugs.add(prefixSlug);
+      anchorSpans.push(`<a id="topic-${prefixSlug}" name="topic-${prefixSlug}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a>`);
+    }
+  }
+  return anchorSpans.join('');
+}
+
 // ─── Explanation entry ────────────────────────────────────────────────────────
 
 function renderExplanationEntry(q: Question, primaryColor: string, accentColor: string, displayNumber: number): string {
@@ -1235,14 +1254,17 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     //       badge are controlled by the same toggle so turning one off hides both.
     const hideTopicUI = suppressTopicHeadings || settings.topicBadgeEnabled === false;
 
-    if (!hideTopicUI && topicKey !== prevTopicKey) {
-      // Only render a topic heading when this question has a non-empty subject path
+    if (topicKey !== prevTopicKey) {
       if (q.subjectPath.length > 0) {
-        sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
+        if (!hideTopicUI) {
+          // Full visible topic heading
+          sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
+        } else {
+          // Heading is visually hidden but we still need anchor targets so that
+          // TOC (index page) links resolve correctly in the PDF.
+          sections.push(renderTopicAnchorsOnly(q.subjectPath, emittedTopicSlugs));
+        }
       }
-      prevTopicKey = topicKey;
-    } else {
-      // Still track prevTopicKey so the logic stays consistent but headings are suppressed
       prevTopicKey = topicKey;
     }
 
