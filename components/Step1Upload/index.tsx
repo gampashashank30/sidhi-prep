@@ -193,9 +193,26 @@ function FileCard({
 // ─── Step 1 Main ───────────────────────────────────────────────────────────────
 
 export default function Step1Upload() {
-  const { setParseResult, setStep, parseResult } = useWizardStore();
+  const { setParseResult, setStep, parseResult, uploadedFileName } = useWizardStore();
   const [dragActive, setDragActive] = useState(false);
-  const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
+
+  // Restore file entries from the store when navigating back to Step 1.
+  // We create a synthetic "done" entry so the uploaded file list is not lost.
+  const [fileEntries, setFileEntries] = useState<FileEntry[]>(() => {
+    if (parseResult && uploadedFileName) {
+      return [
+        {
+          id: `restored-${Date.now()}`,
+          file: new File([], uploadedFileName),
+          status: 'done' as FileStatus,
+          result: parseResult,
+          progress: 100,
+        },
+      ];
+    }
+    return [];
+  });
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const hasEntries = fileEntries.length > 0;
