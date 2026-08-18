@@ -1229,13 +1229,19 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
     const displayNumber = qi + 1; // Sequential 1-based display number regardless of original q.number
     const topicKey = q.subjectPath.join('|||');
 
-    if (!suppressTopicHeadings && topicKey !== prevTopicKey) {
+    // Topic headings are suppressed when:
+    //   (a) questions are randomly shuffled (suppressTopicHeadings flag), OR
+    //   (b) the user has turned off the topic badge — both top heading and bottom
+    //       badge are controlled by the same toggle so turning one off hides both.
+    const hideTopicUI = suppressTopicHeadings || settings.topicBadgeEnabled === false;
+
+    if (!hideTopicUI && topicKey !== prevTopicKey) {
       // Only render a topic heading when this question has a non-empty subject path
       if (q.subjectPath.length > 0) {
         sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
       }
       prevTopicKey = topicKey;
-    } else if (suppressTopicHeadings) {
+    } else {
       // Still track prevTopicKey so the logic stays consistent but headings are suppressed
       prevTopicKey = topicKey;
     }
