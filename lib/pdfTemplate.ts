@@ -223,16 +223,9 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     // Use custom corner logo from settings if provided, else fall back to app logo
     const cornerLogoSrc = settings.cornerLogoDataUrl ?? logoDataUrl;
 
-    // Build the corner element — skip logo entirely if cornerLogoEnabled is false
+    // Build the corner element — empty string if cornerLogoEnabled is false (no circle at all)
     const logoEl = !settings.cornerLogoEnabled
-      ? `<div style="
-          width:${cs}mm;height:${cs}mm;
-          border-radius:50%;
-          background:${primaryColor};
-          border:2px solid ${borderColor};
-          display:flex;align-items:center;justify-content:center;
-          -webkit-print-color-adjust:exact;print-color-adjust:exact;
-        "></div>`
+      ? ''
       : cornerLogoSrc
       ? `<div style="
           width:${cs}mm;height:${cs}mm;
@@ -256,6 +249,12 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
           -webkit-print-color-adjust:exact;print-color-adjust:exact;
         ">S</div>`;
 
+    // Corner wrapper divs — omit entirely when logo is disabled so they don't affect layout
+    const cornerTL = settings.cornerLogoEnabled ? `<div style="position:absolute;top:-${cs/2}mm;left:-${cs/2}mm;z-index:15;">${logoEl}</div>` : '';
+    const cornerTR = settings.cornerLogoEnabled ? `<div style="position:absolute;top:-${cs/2}mm;right:-${cs/2}mm;z-index:15;">${logoEl}</div>` : '';
+    const cornerBL = settings.cornerLogoEnabled ? `<div style="position:absolute;bottom:-${cs/2}mm;left:-${cs/2}mm;z-index:15;">${logoEl}</div>` : '';
+    const cornerBR = settings.cornerLogoEnabled ? `<div style="position:absolute;bottom:-${cs/2}mm;right:-${cs/2}mm;z-index:15;">${logoEl}</div>` : '';
+
     // Border frame (z:10)
     parts.push(`
       <div class="running-border" style="
@@ -268,10 +267,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
         box-sizing:border-box;pointer-events:none;z-index:10;
         -webkit-print-color-adjust:exact;print-color-adjust:exact;
       ">
-        <div style="position:absolute;top:-${cs/2}mm;left:-${cs/2}mm;z-index:15;">${logoEl}</div>
-        <div style="position:absolute;top:-${cs/2}mm;right:-${cs/2}mm;z-index:15;">${logoEl}</div>
-        <div style="position:absolute;bottom:-${cs/2}mm;left:-${cs/2}mm;z-index:15;">${logoEl}</div>
-        <div style="position:absolute;bottom:-${cs/2}mm;right:-${cs/2}mm;z-index:15;">${logoEl}</div>
+        ${cornerTL}${cornerTR}${cornerBL}${cornerBR}
       </div>`);
   }
 
