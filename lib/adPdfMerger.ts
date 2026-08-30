@@ -167,9 +167,15 @@ export async function processPdfWithDestinations(
   resultDoc.catalog.delete(PDFName.of('Metadata'));
   resultDoc.setProducer('Siddhi Prep');
   resultDoc.setCreator('Siddhi Prep');
-  const info = resultDoc.getInfoDict();
-  info.delete(PDFName.of('CreationDate'));
-  info.delete(PDFName.of('ModDate'));
+
+  const infoRef = resultDoc.context.trailerInfo.Info;
+  if (infoRef) {
+    const info = resultDoc.context.lookup(infoRef);
+    if (info instanceof PDFDict) {
+      info.delete(PDFName.of('CreationDate'));
+      info.delete(PDFName.of('ModDate'));
+    }
+  }
 
   const mergedBytes = await resultDoc.save({ updateFieldAppearances: false });
   return Buffer.from(mergedBytes);
