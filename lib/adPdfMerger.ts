@@ -23,7 +23,7 @@ export async function processPdfWithDestinations(
   adPdfBuffer?: Buffer | null,
   pageInterval?: number,
 ): Promise<Buffer> {
-  const mainDoc = await PDFDocument.load(mainPdfBuffer, { ignoreEncryption: true });
+  const mainDoc = await PDFDocument.load(mainPdfBuffer, { ignoreEncryption: true, updateMetadata: false });
   const mainPageCount = mainDoc.getPageCount();
 
   // 1. Build map of mainPageRef -> 0-based mainPageIndex
@@ -63,7 +63,7 @@ export async function processPdfWithDestinations(
 
   if (hasAds) {
     try {
-      adDoc = await PDFDocument.load(adPdfBuffer!, { ignoreEncryption: true });
+      adDoc = await PDFDocument.load(adPdfBuffer!, { ignoreEncryption: true, updateMetadata: false });
       const adPageCount = adDoc.getPageCount();
       adPageIndices = Array.from({ length: adPageCount }, (_, i) => i);
     } catch (err) {
@@ -73,7 +73,7 @@ export async function processPdfWithDestinations(
   }
 
   // 4. Build output document page by page
-  const resultDoc = await PDFDocument.create();
+  const resultDoc = await PDFDocument.create({ updateMetadata: false });
   const mainToResultPageIdx = new Map<number, number>();
 
   for (let i = 0; i < mainPageCount; i++) {
@@ -163,7 +163,15 @@ export async function processPdfWithDestinations(
     }
   }
 
-  const mergedBytes = await resultDoc.save();
+  // 7. Sanitize PDF metadata: set Producer and Creator to "Siddhi Prep", omit creation and modification dates
+  resultDoc.catalog.delete(PDFName.of('Metadata'));
+  resultDoc.setProducer('Siddhi Prep');
+  resultDoc.setCreator('Siddhi Prep');
+  const info = resultDoc.getInfoDict();
+  info.delete(PDFName.of('CreationDate'));
+  info.delete(PDFName.of('ModDate'));
+
+  const mergedBytes = await resultDoc.save({ updateFieldAppearances: false });
   return Buffer.from(mergedBytes);
 }
 
