@@ -1240,6 +1240,28 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // 3. Question sections — natural flow, grouped by topic
   sections.push(`<div style="break-before:page;page-break-before:always;">`);
 
+  // Pre-compute display-order group ranges for direction/passage blocks.
+  // When questions are randomly shuffled the original groupRange (e.g. [15,19])
+  // no longer matches the sequential display numbers (e.g. Q8–Q12).
+  // We scan the render-order array and build a map:
+  //   groupKey ("startQ-endQ") → [firstDisplayNum, lastDisplayNum]
+  // We also track which qi is the first occurrence of each group in render order.
+  const displayGroupRangeMap = new Map<string, [number, number]>();
+  const groupFirstQiMap = new Map<string, number>(); // groupKey → first qi in render order
+  for (let qi = 0; qi < questions.length; qi++) {
+    const q = questions[qi];
+    if (q.passageText && q.groupRange) {
+      const gk = `${q.groupRange[0]}-${q.groupRange[1]}`;
+      const dn = qi + 1;
+      if (!displayGroupRangeMap.has(gk)) {
+        displayGroupRangeMap.set(gk, [dn, dn]);
+        groupFirstQiMap.set(gk, qi);
+      } else {
+        displayGroupRangeMap.get(gk)![1] = dn; // extend end
+      }
+    }
+  }
+
   const emittedTopicSlugs = new Set<string>();
   let prevTopicKey = '';
 
@@ -1268,9 +1290,15 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
       prevTopicKey = topicKey;
     }
 
-    // Render passage block once before the first question in a direction group
-    if (q.isFirstInGroup && q.passageText && q.groupRange) {
-      sections.push(renderPassageBlock(q.passageText, q.groupRange, primaryColor));
+    // Render passage block once before the first question in a direction group.
+    // Use display-order range so the label always matches the visible question numbers.
+    if (q.passageText && q.groupRange) {
+      const gk = `${q.groupRange[0]}-${q.groupRange[1]}`;
+      const isFirstInRenderOrder = groupFirstQiMap.get(gk) === qi;
+      if (isFirstInRenderOrder) {
+        const displayRange = displayGroupRangeMap.get(gk) ?? [displayNumber, displayNumber];
+        sections.push(renderPassageBlock(q.passageText, displayRange, primaryColor));
+      }
     }
 
     sections.push(renderQuestionBlock(q, settings, displayNumber));
@@ -1285,15 +1313,30 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
         Explanations
       </h2>`);
 
+    // Re-compute display-order group ranges for explanation passage references.
+    // (displayGroupRangeMap was built above for the question section and is still in scope.)
+    const expGroupFirstQiMap = new Map<string, number>();
+    for (let qi = 0; qi < questions.length; qi++) {
+      const q = questions[qi];
+      if (q.passageText && q.groupRange) {
+        const gk = `${q.groupRange[0]}-${q.groupRange[1]}`;
+        if (!expGroupFirstQiMap.has(gk)) expGroupFirstQiMap.set(gk, qi);
+      }
+    }
+
     for (let qi = 0; qi < questions.length; qi++) {
       const q = questions[qi];
       const displayNumber = qi + 1; // Sequential 1-based display number
 
-      // For the first Q in a passage group, include a compact passage reference
-      // so explanations are self-contained (reader doesn't have to flip back)
-      if (q.isFirstInGroup && q.passageText && q.groupRange) {
-        const [s, e] = q.groupRange;
-        sections.push(`
+      // For the first Q in a passage group (in render order), include a compact
+      // passage reference so explanations are self-contained.
+      if (q.passageText && q.groupRange) {
+        const gk = `${q.groupRange[0]}-${q.groupRange[1]}`;
+        const isFirstInRenderOrder = expGroupFirstQiMap.get(gk) === qi;
+        if (isFirstInRenderOrder) {
+          const displayRange = displayGroupRangeMap.get(gk) ?? [displayNumber, displayNumber];
+          const [s, e] = displayRange;
+          sections.push(`
           <div style="
             break-inside:avoid;break-after:avoid;
             page-break-inside:avoid;page-break-after:avoid;
@@ -1309,6 +1352,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
             </div>
             <div style="font-size:7.5pt;color:#444;line-height:1.55;word-break:break-word;white-space:pre-wrap;">${renderMath(stripMarkdown(q.passageText))}</div>
           </div>`);
+        }
       }
 
       sections.push(renderExplanationEntry(q, primaryColor, accentColor, displayNumber));
