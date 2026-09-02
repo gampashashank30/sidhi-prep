@@ -139,14 +139,24 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       // the corner-icon zone (right 0–18mm) and the centered social icons.
       footerTemplate: `
         <script>
-          // Chromium injects the page counter into .pageNumber before rendering.
-          // When the counter is 0 (cover page — reset via @page :first) we hide
-          // the pill entirely so no number appears on the cover page.
+          // Chromium's <span class="pageNumber"> always contains the physical page number
+          // (1-based, unaffected by CSS counter-reset). We adjust it so that:
+          //   physical page 1 (cover)  → pill hidden  (no page number on cover)
+          //   physical page 2 (index)  → shows "1"    (index = page 1)
+          //   physical page 3+         → shows "2", "3", …
+          // Chromium fills .pageNumber BEFORE DOMContentLoaded fires, so reading
+          // textContent here always gives the correct value.
           document.addEventListener('DOMContentLoaded', function() {
-            var pn = document.querySelector('.pageNumber');
+            var pn   = document.querySelector('.pageNumber');
             var pill = document.getElementById('pg-pill');
-            if (pn && pill && (pn.textContent.trim() === '0' || parseInt(pn.textContent) <= 0)) {
+            if (!pn || !pill) return;
+            var physical = parseInt(pn.textContent, 10);
+            if (physical <= 1) {
+              // Cover page — hide the pill entirely
               pill.style.visibility = 'hidden';
+            } else {
+              // Subtract 1 so index page shows 1, questions show 2, 3, …
+              pn.textContent = String(physical - 1);
             }
           });
         </script>
@@ -176,6 +186,7 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
           </div>
         </div>
       `,
+
     });
 
     // ── Ad PDF merging ────────────────────────────────────────────────────────
