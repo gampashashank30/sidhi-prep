@@ -836,6 +836,38 @@ export default function Step3Customize() {
     }
   }, [pdfSettings.adPdf?.pageInterval, update]);
 
+  // ── Interlude PDF upload ───────────────────────────────────────────────
+  // Interlude pages are inserted after the cover page, before the index/TOC.
+  // They do NOT consume any page numbers in the output PDF.
+  const [interludePdfUploading, setInterludePdfUploading] = useState(false);
+  const [interludePdfError, setInterludePdfError] = useState<string | null>(null);
+  const [interludePdfMeta, setInterludePdfMeta] = useState<{ fileName: string; pageCount: number; sizeKb: number } | null>(
+    pdfSettings.interludePdf ? { fileName: 'Uploaded interlude PDF', pageCount: 0, sizeKb: 0 } : null,
+  );
+
+  const handleInterludePdfUpload = useCallback(async (file: File) => {
+    if (!file.name.endsWith('.pdf') && file.type !== 'application/pdf') {
+      setInterludePdfError('Please upload a PDF file.');
+      return;
+    }
+    setInterludePdfError(null);
+    setInterludePdfUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload-interlude-pdf', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed');
+      update('interludePdf', { base64: data.base64 });
+      setInterludePdfMeta({ fileName: data.fileName, pageCount: data.pageCount, sizeKb: data.sizeKb });
+    } catch (err) {
+      setInterludePdfError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setInterludePdfUploading(false);
+    }
+  }, [update]);
+
+
 
 
 
@@ -1302,6 +1334,80 @@ export default function Step3Customize() {
                 );
               })}
             </div>
+          </SettingsSection>
+
+          {/* 5.5b Interlude PDF — inserted between cover and index, not counted in page numbers */}
+          <SettingsSection title="Interlude PDF (After Cover)" icon={
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+          }>
+            <p className="text-xs text-gray-500 mb-3">
+              Upload a PDF to insert between the <strong>cover page</strong> and the <strong>index/TOC page</strong>.
+              These pages are <strong>not counted</strong> in the page-number sequence — the index page will always show page&nbsp;1.
+              Useful for sponsor pages, instructions, or a syllabus (optional).
+            </p>
+
+            {/* Upload zone */}
+            {!pdfSettings.interludePdf ? (
+              <label
+                htmlFor="interlude-pdf-upload"
+                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-6 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/40 transition-all"
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleInterludePdfUpload(f);
+                }}
+              >
+                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                {interludePdfUploading ? (
+                  <span className="text-sm text-indigo-600 font-medium">Uploading…</span>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold text-gray-600">Drop interlude PDF here or click to browse</span>
+                    <span className="text-xs text-gray-400">PDF only · Max 10 MB · Not counted in page numbers</span>
+                  </>
+                )}
+                <input
+                  id="interlude-pdf-upload"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleInterludePdfUpload(f); e.target.value = ''; }}
+                />
+              </label>
+            ) : (
+              /* Uploaded interlude PDF card */
+              <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <div className="flex-shrink-0 w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{interludePdfMeta?.fileName ?? 'interlude.pdf'}</p>
+                  <p className="text-xs text-gray-500">
+                    {interludePdfMeta?.pageCount ? `${interludePdfMeta.pageCount} page${interludePdfMeta.pageCount > 1 ? 's' : ''}` : ''}
+                    {interludePdfMeta?.sizeKb ? ` · ${interludePdfMeta.sizeKb} KB` : ''}
+                    <span className="ml-1 text-indigo-600 font-medium">· Not counted in page numbers ✓</span>
+                  </p>
+                </div>
+                <button
+                  className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded"
+                  onClick={() => { update('interludePdf', undefined); setInterludePdfMeta(null); setInterludePdfError(null); }}
+                  title="Remove interlude PDF"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+
+            {interludePdfError && (
+              <p className="text-xs text-red-600 mt-2 bg-red-50 px-3 py-1.5 rounded-lg">{interludePdfError}</p>
+            )}
           </SettingsSection>
 
           {/* 5.6 Ads — PDF-based */}

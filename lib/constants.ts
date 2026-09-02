@@ -47,6 +47,7 @@ export const DEFAULT_PDF_SETTINGS = {
   indexPageEnabled: true,
   socialLinks: { instagram: '', youtube: '', telegram: '', playStore: '', appStore: '', microsoftStore: '' },
   adPdf: undefined,
+  interludePdf: undefined,
   primaryColor: DEFAULT_PRIMARY,
   accentColor: DEFAULT_ACCENT,
 };

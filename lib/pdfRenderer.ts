@@ -138,6 +138,18 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       // Positioned at padding-right:32mm → horizontally in the dead zone between
       // the corner-icon zone (right 0–18mm) and the centered social icons.
       footerTemplate: `
+        <script>
+          // Chromium injects the page counter into .pageNumber before rendering.
+          // When the counter is 0 (cover page — reset via @page :first) we hide
+          // the pill entirely so no number appears on the cover page.
+          document.addEventListener('DOMContentLoaded', function() {
+            var pn = document.querySelector('.pageNumber');
+            var pill = document.getElementById('pg-pill');
+            if (pn && pill && (pn.textContent.trim() === '0' || parseInt(pn.textContent) <= 0)) {
+              pill.style.visibility = 'hidden';
+            }
+          });
+        </script>
         <div style="
           width:100%;
           height:100%;
@@ -148,7 +160,7 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
           align-items:center;
           background:transparent;
         ">
-          <div style="
+          <div id="pg-pill" style="
             display:inline-flex;
             align-items:center;
             gap:3px;
@@ -198,8 +210,19 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
     //   any ad merging.
     //
     const puppeteerBuffer = Buffer.from(pdfBuffer);
+    let interludeBuffer: Buffer | null = null;
     let adBuffer: Buffer | null = null;
     let pageInterval = 0;
+
+    // Extract interlude PDF (inserted between cover and index, not counted in page numbers)
+    if (opts.settings.interludePdf?.base64) {
+      try {
+        interludeBuffer = Buffer.from(opts.settings.interludePdf.base64, 'base64');
+      } catch (intErr) {
+        console.error('[pdfRenderer] Failed to parse interlude PDF buffer, skipping:', intErr);
+        interludeBuffer = null;
+      }
+    }
 
     if (opts.settings.adPdf?.base64 && opts.settings.adPdf.pageInterval > 0) {
       try {
@@ -213,7 +236,8 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
 
     // Process destinations and link annotations using pdf-lib object remapping.
     // Handles BOTH cases (with advertisement PDF pages merged or without ads).
-    const finalBuffer = await processPdfWithDestinations(puppeteerBuffer, adBuffer, pageInterval);
+    // interludeBuffer is inserted after cover (page 0), before index (page 1).
+    const finalBuffer = await processPdfWithDestinations(puppeteerBuffer, interludeBuffer, adBuffer, pageInterval);
     return finalBuffer;
   } finally {
     await page.close(); // Only close the page, leave the browser running

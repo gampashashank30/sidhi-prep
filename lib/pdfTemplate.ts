@@ -1438,6 +1438,13 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       margin: 0;
     }
 
+    /* ── Offset page counter so cover page = 0, index/TOC page = 1 ── */
+    /* Chromium auto-increments the 'page' counter on each page. Resetting  */
+    /* to 0 on :first means cover gets 0 → footer hides it, index gets 1.  */
+    @page :first {
+      counter-reset: page 0;
+    }
+
     /* ── Base typography ── */
     html, body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

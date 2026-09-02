@@ -97,6 +97,13 @@ export type PDFSettings = {
     pageInterval: number; // Insert after every N content pages (1–10)
   };
 
+  // 5.6b Interlude PDF — inserted between cover page and index/TOC page.
+  // These pages are NOT counted in the page number sequence.
+  // Optional: leave undefined to skip.
+  interludePdf?: {
+    base64: string;      // The uploaded interlude PDF as a base64 string
+  };
+
   // 5.7 Colors
   primaryColor: string;   // hex
   accentColor: string;    // hex
