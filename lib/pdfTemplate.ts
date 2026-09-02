@@ -833,6 +833,9 @@ export interface TemplateOptions {
   /** When true, topic-section headings are NOT rendered in the question body.
    *  Use this when questions are randomly segregated so heading-spam is avoided. */
   suppressTopicHeadings?: boolean;
+  /** When true, the cover section is omitted. Used for two-pass rendering so the
+   *  cover is a separate footer-free PDF and does not consume a page-number slot. */
+  noCover?: boolean;
 }
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
@@ -1196,7 +1199,7 @@ function renderAnalyticsPage(
 export function buildHTMLTemplate(opts: TemplateOptions): string {
   const { questions, coverSettings, logoDataUrl, settings,
           previewMode = false, previewQuestionIndex = 0,
-          suppressTopicHeadings = false } = opts;
+          suppressTopicHeadings = false, noCover = false } = opts;
 
   const layout = computeLayout(settings);
   const flatTopics = buildFlatTopicList(questions);
@@ -1220,8 +1223,10 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // ── FULL DOCUMENT ───────────────────────────────────────────────────────────
   const sections: string[] = [];
 
-  // 1. Cover page
-  sections.push(renderCoverSection(coverSettings, layout));
+  // 1. Cover page (skipped when noCover=true — rendered separately with no footer)
+  if (!noCover) {
+    sections.push(renderCoverSection(coverSettings, layout));
+  }
 
   // 2. Table of Contents / Index Page — conditional on settings.indexPageEnabled
   if (settings.indexPageEnabled !== false && flatTopics.length > 0) {
@@ -1532,5 +1537,43 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
     </table>
   </div>
 </body>
+</html>`;
+}
+
+// --- Cover-only HTML (two-pass render) ---
+
+/**
+ * Returns a minimal standalone A4 HTML document containing ONLY the cover page.
+ * Two-pass render flow:
+ *   Pass 1: buildCoverOnlyHTML  -> Puppeteer(displayHeaderFooter:false) -> coverBuffer
+ *   Pass 2: buildHTMLTemplate({noCover:true}) -> Puppeteer(displayHeaderFooter:true) -> contentBuffer
+ * The content PDF page-numbers start at 1 (index page). The cover gets no number.
+ */
+export function buildCoverOnlyHTML(opts: TemplateOptions): string {
+  const { coverSettings } = opts;
+  const W = PAGE_WIDTH_MM;
+  const H = PAGE_HEIGHT_MM;
+
+  let coverBody: string;
+  if (!coverSettings) {
+    coverBody = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(150deg,#0F3D6E 0%,#1B5EA7 55%,#14B89A 100%);display:flex;align-items:center;justify-content:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><div style="text-align:center;color:white;"><div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Siddhi</div><div style="font-size:13pt;opacity:0.8;letter-spacing:3px;text-transform:uppercase;">Question Bank</div></div></div>`;
+  } else {
+    const px = Math.round(coverSettings.focalX * 100) + '%';
+    const py = Math.round(coverSettings.focalY * 100) + '%';
+    coverBody = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><img src="${coverSettings.dataUrl}" style="width:100%;height:100%;object-fit:cover;object-position:${px} ${py};display:block;-webkit-print-color-adjust:exact;print-color-adjust:exact;" /></div>`;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cover</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    @page{size:${W}mm ${H}mm;margin:0;}
+    html,body{width:${W}mm;height:${H}mm;overflow:hidden;background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  </style>
+</head>
+<body>${coverBody}</body>
 </html>`;
 }

@@ -1,12 +1,13 @@
 // lib/pdfRenderer.ts
-// Puppeteer PDF renderer — takes an HTML string and returns a PDF Buffer
-// Uses puppeteer-core + @sparticuz/chromium for serverless (Render/Vercel/Railway)
-// Falls back to local system Chrome for development
+// Puppeteer PDF renderer — two-pass approach for correct page numbering:
+//   Pass 1: cover-only HTML, displayHeaderFooter:false  → coverBuffer (no page number)
+//   Pass 2: content HTML (no cover), displayHeaderFooter:true → contentBuffer (index = Pg 1)
+// The two buffers are merged by processPdfWithDestinations in adPdfMerger.ts.
 
 import puppeteer, { Browser } from 'puppeteer-core';
 import { existsSync } from 'fs';
 import type { TemplateOptions } from './pdfTemplate';
-import { buildHTMLTemplate } from './pdfTemplate';
+import { buildHTMLTemplate, buildCoverOnlyHTML } from './pdfTemplate';
 import { processPdfWithDestinations } from './adPdfMerger';
 
 const PUPPETEER_ARGS = [
@@ -93,39 +94,57 @@ async function launchBrowser() {
   );
 }
 
+/**
+ * Navigate a Puppeteer page to an HTML string (via a temp file) and print to PDF.
+ * Returns a Buffer of the resulting PDF bytes.
+ */
+async function renderHtmlToPdfBuffer(
+  page: Awaited<ReturnType<Browser['newPage']>>,
+  html: string,
+  pdfOptions: Parameters<typeof page.pdf>[0],
+): Promise<Buffer> {
+  const os   = require('os');
+  const path = require('path');
+  const fs   = require('fs');
+  const tmpFile = path.join(os.tmpdir(), `siddhi-pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
+  fs.writeFileSync(tmpFile, html, 'utf8');
+  try {
+    await page.goto(`file://${tmpFile}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+  const bytes = await page.pdf(pdfOptions);
+  return Buffer.from(bytes);
+}
+
 export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
-  const html = buildHTMLTemplate(opts);
+  const { primaryColor = '#1B5EA7', accentColor = '#14B89A' } = opts.settings;
 
   const browser = await launchBrowser();
-  const page = await browser.newPage();
+  const page    = await browser.newPage();
 
   try {
-    // IMPORTANT: We use page.goto('file://...') instead of page.setContent()
-    // because setContent loads the page as 'about:blank', which means all href="#q-N"
-    // links resolve to "about:blank#q-N" (a different document) in the PDF.
-    // With a file:// URL the page has a real base URL, so "#q-N" resolves as a
-    // same-page fragment — Puppeteer correctly converts it to a named PDF destination.
-    //
-    // We cannot use data: URIs here because encodeURIComponent on a large HTML
-    // document can produce URLs exceeding Chrome's ~2MB URL limit.
-    const os = require('os');
-    const path = require('path');
-    const fs = require('fs');
-    const tmpFile = path.join(os.tmpdir(), `siddhi-pdf-${Date.now()}.html`);
-    fs.writeFileSync(tmpFile, html, 'utf8');
-    try {
-      await page.goto(`file://${tmpFile}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
-      });
-    } finally {
-      // Clean up temp file regardless of success/failure
-      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
-    }
+    // ── Pass 1: Cover-only — no displayHeaderFooter ────────────────────────
+    // The cover page must NOT appear in the page-number sequence. Rendering it
+    // as a separate PDF (without displayHeaderFooter) guarantees this, because
+    // Chromium's <span class="pageNumber"> only runs inside the footer template
+    // and the content PDF starts fresh at page 1 for the index page.
+    const coverHtml = buildCoverOnlyHTML(opts);
+    const coverBuffer = await renderHtmlToPdfBuffer(page, coverHtml, {
+      format: 'A4',
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      preferCSSPageSize: true,
+      displayHeaderFooter: false,
+      headerTemplate: '<span></span>',
+      footerTemplate: '<span></span>',
+    });
 
-    const { primaryColor = '#1B5EA7', accentColor = '#14B89A' } = opts.settings;
-
-    const pdfBuffer = await page.pdf({
+    // ── Pass 2: Content (index onwards) — displayHeaderFooter:true ─────────
+    // With the cover omitted, the index/TOC page is the FIRST page of this PDF,
+    // so <span class="pageNumber"> naturally shows 1, 2, 3 … with no offset.
+    const contentHtml = buildHTMLTemplate({ ...opts, noCover: true });
+    const contentBuffer = await renderHtmlToPdfBuffer(page, contentHtml, {
       format: 'A4',
       printBackground: true,
       tagged: true,
@@ -133,33 +152,8 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
-      // Footer renders in the bottom-margin area. It has transparent background
-      // so fixed social-icon and border elements below shine through.
-      // Positioned at padding-right:32mm → horizontally in the dead zone between
-      // the corner-icon zone (right 0–18mm) and the centered social icons.
+      // Simple footer pill — no JS offset needed because content starts at 1
       footerTemplate: `
-        <script>
-          // Chromium's <span class="pageNumber"> always contains the physical page number
-          // (1-based, unaffected by CSS counter-reset). We adjust it so that:
-          //   physical page 1 (cover)  → pill hidden  (no page number on cover)
-          //   physical page 2 (index)  → shows "1"    (index = page 1)
-          //   physical page 3+         → shows "2", "3", …
-          // Chromium fills .pageNumber BEFORE DOMContentLoaded fires, so reading
-          // textContent here always gives the correct value.
-          document.addEventListener('DOMContentLoaded', function() {
-            var pn   = document.querySelector('.pageNumber');
-            var pill = document.getElementById('pg-pill');
-            if (!pn || !pill) return;
-            var physical = parseInt(pn.textContent, 10);
-            if (physical <= 1) {
-              // Cover page — hide the pill entirely
-              pill.style.visibility = 'hidden';
-            } else {
-              // Subtract 1 so index page shows 1, questions show 2, 3, …
-              pn.textContent = String(physical - 1);
-            }
-          });
-        </script>
         <div style="
           width:100%;
           height:100%;
@@ -170,7 +164,7 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
           align-items:center;
           background:transparent;
         ">
-          <div id="pg-pill" style="
+          <div style="
             display:inline-flex;
             align-items:center;
             gap:3px;
@@ -186,73 +180,45 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
           </div>
         </div>
       `,
-
     });
 
-    // ── Ad PDF merging ────────────────────────────────────────────────────────
-    // IMPORTANT ORDER: fixPdfDestinationsForMobile MUST run BEFORE mergeAdPages.
-    //
-    // Root cause of broken internal links with ads:
-    //   pdf-lib's copyPages() faithfully copies each page's /Annots array (which
-    //   holds link annotations with /D (q-5) named-destination strings) but it
-    //   silently DROPS the document-level /Names catalog (the lookup table that
-    //   maps "q-5" → [pageObject /XYZ 0 740 0]).  Without /Names, every /D (q-5)
-    //   reference is unresolvable — "View Explanation ↓", "← Back to Question",
-    //   and TOC links all silently fail in every PDF viewer.
-    //
-    // Why pre-patching is safe (object IDs are correctly remapped by pdf-lib):
-    //   fixPdfDestinationsForMobile replaces /D (q-5) with /D [5 0 R /XYZ 0 740 0].
-    //   The [5 0 R ...] form is an array containing an indirect object reference.
-    //   pdf-lib's object copier traverses annotation dictionaries recursively and
-    //   remaps every indirect reference it finds (5 0 R → new ID in result doc).
-    //   So the patched [5 0 R /XYZ 0 740 0] becomes [<newID> 0 R /XYZ 0 740 0]
-    //   in the merged output — pointing correctly to the right page, even after
-    //   ad pages shift all content page indices.
-    //
-    // Why the OLD order (merge → patch) was wrong:
-    //   After merging, pdf-lib produces a fresh document with no /Names dict at all.
-    //   fixPdfDestinationsForMobile scans for /Names entries to build its destMap;
-    //   finding none, it returns the buffer unchanged — leaving every internal link
-    //   broken.
-    //
-    // This pre-patch also fixes internal links when NO ads are uploaded:
-    //   Google Drive Mobile and many mobile PDF apps strip the /Names dict entirely,
-    //   so the inline [pageRef /XYZ] form is needed for tap-navigation even without
-    //   any ad merging.
-    //
-    const puppeteerBuffer = Buffer.from(pdfBuffer);
+    // ── Extract interlude and ad buffers from settings ────────────────────
     let interludeBuffer: Buffer | null = null;
     let adBuffer: Buffer | null = null;
     let pageInterval = 0;
 
-    // Extract interlude PDF (inserted between cover and index, not counted in page numbers)
     if (opts.settings.interludePdf?.base64) {
       try {
         interludeBuffer = Buffer.from(opts.settings.interludePdf.base64, 'base64');
-      } catch (intErr) {
-        console.error('[pdfRenderer] Failed to parse interlude PDF buffer, skipping:', intErr);
-        interludeBuffer = null;
+      } catch (err) {
+        console.error('[pdfRenderer] Failed to parse interlude PDF buffer, skipping:', err);
       }
     }
 
     if (opts.settings.adPdf?.base64 && opts.settings.adPdf.pageInterval > 0) {
       try {
-        adBuffer = Buffer.from(opts.settings.adPdf.base64, 'base64');
+        adBuffer    = Buffer.from(opts.settings.adPdf.base64, 'base64');
         pageInterval = opts.settings.adPdf.pageInterval;
-      } catch (adErr) {
-        console.error('[pdfRenderer] Failed to parse ad PDF buffer, skipping ads:', adErr);
-        adBuffer = null;
+      } catch (err) {
+        console.error('[pdfRenderer] Failed to parse ad PDF buffer, skipping ads:', err);
       }
     }
 
-    // Process destinations and link annotations using pdf-lib object remapping.
-    // Handles BOTH cases (with advertisement PDF pages merged or without ads).
-    // interludeBuffer is inserted after cover (page 0), before index (page 1).
-    const finalBuffer = await processPdfWithDestinations(puppeteerBuffer, interludeBuffer, adBuffer, pageInterval);
+    // ── Merge: cover + interlude + content (with ad insertions + dest repair) ─
+    // processPdfWithDestinations prepends coverBuffer (1 page, no destinations),
+    // then interlude pages, then the content pages. All named destinations inside
+    // contentBuffer are offset by (coverPageCount + interludePageCount) so that
+    // TOC links, q<->explanation links, etc. resolve correctly in the final PDF.
+    const finalBuffer = await processPdfWithDestinations(
+      contentBuffer,    // main content — has destinations, starts at index page
+      coverBuffer,      // cover — prepended at position 0, no destinations
+      interludeBuffer,  // optional interlude between cover and index
+      adBuffer,
+      pageInterval,
+    );
+
     return finalBuffer;
   } finally {
-    await page.close(); // Only close the page, leave the browser running
+    await page.close();
   }
 }
-
-
