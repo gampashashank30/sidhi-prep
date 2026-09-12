@@ -734,11 +734,21 @@ function buildFlatTopicList(questions: Question[]): FlatEntry[] {
     .map(([, { path, count }]) => ({ path, count, slug: slugify(path), depth: path.length - 1 }));
 }
 
-function renderTOC(entries: FlatEntry[], primaryColor: string, accentColor: string): string {
+function renderTOC(
+  entries: FlatEntry[],
+  primaryColor: string,
+  accentColor: string,
+  tocPageNumbers?: Record<string, number>,
+): string {
   const rows = entries.map(({ path, slug, count, depth }) => {
     const label = path[path.length - 1];
     const isTop = depth === 0;
     const paddingLeft = isTop ? 10 : 10 + depth * 14;
+    // Use the server-baked page number when available; fall back to '—' for
+    // the first pass (or screen preview), which the JS script will fill in.
+    const pgText = tocPageNumbers?.[slug] != null
+      ? String(tocPageNumbers[slug])
+      : '—';
     return `<a href="#topic-${slug}" data-toc-page-slug="${slug}" style="
       display:block;
       text-decoration:none;
@@ -762,7 +772,7 @@ function renderTOC(entries: FlatEntry[], primaryColor: string, accentColor: stri
           white-space:nowrap;flex-shrink:0;
           min-width:30px;text-align:center;
           -webkit-print-color-adjust:exact;print-color-adjust:exact;
-        ">—</span>
+        ">${pgText}</span>
       </div>
     </a>`;
   }).join('');
@@ -846,6 +856,13 @@ export interface TemplateOptions {
   /** When true, the cover section is omitted. Used for two-pass rendering so the
    *  cover is a separate footer-free PDF and does not consume a page-number slot. */
   noCover?: boolean;
+  /**
+   * Pre-computed map of { slug → 1-based content-page-number } for every topic
+   * anchor.  When present, the TOC page numbers are baked in as static HTML so
+   * they exactly match the footer and named-destination links in the final PDF.
+   * Populated by a server-side pass that reads the rendered PDF's /Dests catalog.
+   */
+  tocPageNumbers?: Record<string, number>;
 }
 
 // ─── Analytics page builder (pure SVG, static — no JS needed) ─────────────────
@@ -1209,7 +1226,8 @@ function renderAnalyticsPage(
 export function buildHTMLTemplate(opts: TemplateOptions): string {
   const { questions, coverSettings, logoDataUrl, settings,
           previewMode = false, previewQuestionIndex = 0,
-          suppressTopicHeadings = false, noCover = false } = opts;
+          suppressTopicHeadings = false, noCover = false,
+          tocPageNumbers } = opts;
 
   const layout = computeLayout(settings);
   const flatTopics = buildFlatTopicList(questions);
@@ -1241,7 +1259,7 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
   // 2. Table of Contents / Index Page — conditional on settings.indexPageEnabled
   if (settings.indexPageEnabled !== false && flatTopics.length > 0) {
     sections.push(`<div style="break-before:page;page-break-before:always;">
-      ${renderTOC(flatTopics, primaryColor, accentColor)}
+      ${renderTOC(flatTopics, primaryColor, accentColor, tocPageNumbers)}
     </div>`);
   }
 
@@ -1548,14 +1566,12 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
   </div>
   <script>
   (function () {
+    // Screen/preview fallback only — fills '.toc-pg' spans that still show '—'.
+    // In production PDF renders the server bakes real page numbers into the HTML
+    // via tocPageNumbers, so this script is a no-op for those spans.
     // A4 page height in CSS pixels at 96 dpi: 297mm × (96 / 25.4) px/mm
     var PAGE_H_PX = 297 * 96 / 25.4;
 
-    /**
-     * Walk the offsetParent chain to get an element's absolute Y position
-     * from the top of the document. More reliable than getBoundingClientRect()
-     * in Chromium's print/beforeprint context where the viewport may differ.
-     */
     function absoluteTop(el) {
       var top = 0;
       var node = el;
@@ -1566,29 +1582,25 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       return top;
     }
 
-    function fillTocPageNumbers() {
+    function fillTocPageNumbersFallback() {
       var rows = document.querySelectorAll('[data-toc-page-slug]');
       rows.forEach(function (row) {
+        var pgSpan = row.querySelector('.toc-pg');
+        // Skip if already filled by server-baked number
+        if (!pgSpan || pgSpan.textContent.trim() !== '\u2014') return;
         var slug   = row.getAttribute('data-toc-page-slug');
         var anchor = document.getElementById('topic-' + slug);
-        var pgSpan = row.querySelector('.toc-pg');
-        if (!anchor || !pgSpan) return;
+        if (!anchor) return;
         var absY    = absoluteTop(anchor);
         var pageNum = Math.floor(absY / PAGE_H_PX) + 1;
-        // Never show page 0 (safety guard for anchors at Y=0 before the TOC itself)
         pgSpan.textContent = String(Math.max(1, pageNum));
       });
     }
 
-    // Chromium fires 'beforeprint' before rasterising each page — all layout is
-    // already final at this point, so element positions are correct.
-    window.addEventListener('beforeprint', fillTocPageNumbers);
-
-    // Fallback for preview/screen mode (iframe srcdoc path)
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', fillTocPageNumbers);
+      document.addEventListener('DOMContentLoaded', fillTocPageNumbersFallback);
     } else {
-      fillTocPageNumbers();
+      fillTocPageNumbersFallback();
     }
   })();
   </script>

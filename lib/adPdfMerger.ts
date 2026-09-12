@@ -228,6 +228,57 @@ export async function processPdfWithDestinations(
 }
 
 /**
+ * Reads the /Dests catalog from a Puppeteer-rendered content PDF and returns
+ * a map of { slug → 1-based content-page-number } for every "topic-*" named
+ * destination.  The page number here is content-PDF-relative (index page = 1),
+ * which matches the footer printed by Puppeteer's displayHeaderFooter.
+ *
+ * Call this on the raw contentBuffer (before the cover/ad merge) so that
+ * indices are still relative to the content PDF, not the final merged PDF.
+ */
+export async function extractTopicPageNumbers(
+  contentPdfBuffer: Buffer,
+): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  try {
+    const doc = await PDFDocument.load(contentPdfBuffer, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+
+    const pages = doc.getPages();
+    const pageRefToIdx = new Map<string, number>();
+    pages.forEach((p, idx) => pageRefToIdx.set(p.ref.toString(), idx));
+
+    const destsRef  = doc.catalog.get(PDFName.of('Dests'));
+    const destsDict = destsRef ? (doc.context.lookup(destsRef) as PDFDict) : null;
+    if (!destsDict) return result;
+
+    for (const [key, val] of destsDict.entries()) {
+      const destKey = key.toString().replace(/^\//, '');
+      // Only process topic-* destinations
+      if (!destKey.startsWith('topic-')) continue;
+      const slug = destKey.slice('topic-'.length);
+
+      const destArray = val instanceof PDFArray
+        ? val
+        : (doc.context.lookup(val) as PDFArray);
+      if (!destArray || destArray.size() === 0) continue;
+
+      const targetPageRef = destArray.get(0).toString();
+      const pageIdx       = pageRefToIdx.get(targetPageRef);
+      if (pageIdx !== undefined) {
+        // +1 because content PDF's index page is page 1 (matches footer)
+        result[slug] = pageIdx + 1;
+      }
+    }
+  } catch (err) {
+    console.error('[adPdfMerger] extractTopicPageNumbers failed:', err);
+  }
+  return result;
+}
+
+/**
  * Legacy wrapper: inserts ad pages and repairs destinations. No cover split.
  */
 export async function mergeAdPages(

@@ -8,7 +8,7 @@ import puppeteer, { Browser } from 'puppeteer-core';
 import { existsSync } from 'fs';
 import type { TemplateOptions } from './pdfTemplate';
 import { buildHTMLTemplate, buildCoverOnlyHTML } from './pdfTemplate';
-import { processPdfWithDestinations } from './adPdfMerger';
+import { processPdfWithDestinations, extractTopicPageNumbers } from './adPdfMerger';
 
 const PUPPETEER_ARGS = [
   '--no-sandbox',
@@ -140,11 +140,9 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       footerTemplate: '<span></span>',
     });
 
-    // ── Pass 2: Content (index onwards) — displayHeaderFooter:true ─────────
-    // With the cover omitted, the index/TOC page is the FIRST page of this PDF,
-    // so <span class="pageNumber"> naturally shows 1, 2, 3 … with no offset.
-    const contentHtml = buildHTMLTemplate({ ...opts, noCover: true });
-    const contentBuffer = await renderHtmlToPdfBuffer(page, contentHtml, {
+    // ── Pass 2a: Content — first render (TOC shows '—', used to extract real page numbers)
+    const contentHtml1 = buildHTMLTemplate({ ...opts, noCover: true });
+    const contentBuffer1 = await renderHtmlToPdfBuffer(page, contentHtml1, {
       format: 'A4',
       printBackground: true,
       tagged: true,
@@ -152,7 +150,6 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
       preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
-      // Simple footer pill — no JS offset needed because content starts at 1
       footerTemplate: `
         <div style="
           width:100%;
@@ -181,6 +178,58 @@ export async function renderPDF(opts: TemplateOptions): Promise<Buffer> {
         </div>
       `,
     });
+
+    // ── Pass 2b: Extract real topic page numbers from the PDF /Dests catalog ──
+    // Chromium writes the exact named-destination → page mapping into the PDF.
+    // Reading it back gives us 100%-accurate content-relative page numbers.
+    const tocPageNumbers = await extractTopicPageNumbers(contentBuffer1);
+
+    // ── Pass 2c: Content — second render with page numbers baked into TOC HTML ─
+    // Re-render only if we got page numbers; otherwise reuse the first render.
+    let contentBuffer: Buffer;
+    if (Object.keys(tocPageNumbers).length > 0) {
+      const contentHtml2 = buildHTMLTemplate({ ...opts, noCover: true, tocPageNumbers });
+      contentBuffer = await renderHtmlToPdfBuffer(page, contentHtml2, {
+        format: 'A4',
+        printBackground: true,
+        tagged: true,
+        margin: { top: 0, right: 0, bottom: '0.1mm', left: 0 },
+        preferCSSPageSize: true,
+        displayHeaderFooter: true,
+        headerTemplate: '<span></span>',
+        // Simple footer pill — no JS offset needed because content starts at 1
+        footerTemplate: `
+          <div style="
+            width:100%;
+            height:100%;
+            box-sizing:border-box;
+            padding-right:32mm;
+            display:flex;
+            justify-content:flex-end;
+            align-items:center;
+            background:transparent;
+          ">
+            <div style="
+              display:inline-flex;
+              align-items:center;
+              gap:3px;
+              background:linear-gradient(135deg,${primaryColor} 0%,${accentColor} 100%);
+              border-radius:20px;
+              padding:3px 10px 3px 8px;
+              box-shadow:0 1px 6px rgba(0,0,0,0.28);
+              -webkit-print-color-adjust:exact;
+              print-color-adjust:exact;
+            ">
+              <span style="font-size:7px;font-weight:600;color:rgba(255,255,255,0.8);letter-spacing:0.8px;text-transform:uppercase;font-family:Arial,sans-serif;">Pg</span>
+              <span class="pageNumber" style="font-size:9px;font-weight:800;color:#ffffff;font-family:Arial,sans-serif;margin-left:2px;"></span>
+            </div>
+          </div>
+        `,
+      });
+    } else {
+      // No topic anchors found (e.g. index page disabled) — use the first render
+      contentBuffer = contentBuffer1;
+    }
 
     // ── Extract interlude and ad buffers from settings ────────────────────
     let interludeBuffer: Buffer | null = null;
