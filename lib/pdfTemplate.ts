@@ -739,7 +739,7 @@ function renderTOC(entries: FlatEntry[], primaryColor: string, accentColor: stri
     const label = path[path.length - 1];
     const isTop = depth === 0;
     const paddingLeft = isTop ? 10 : 10 + depth * 14;
-    return `<a href="#topic-${slug}" style="
+    return `<a href="#topic-${slug}" data-toc-page-slug="${slug}" style="
       display:block;
       text-decoration:none;
       break-inside:avoid;page-break-inside:avoid;
@@ -753,6 +753,16 @@ function renderTOC(entries: FlatEntry[], primaryColor: string, accentColor: stri
           : `<span style="width:5px;height:5px;border-radius:50%;background:${accentColor};flex-shrink:0;margin-left:4px;opacity:0.7;"></span>`}
         <span style="font-size:${isTop ? 9 : 8}pt;font-weight:${isTop ? 700 : 500};color:${isTop ? primaryColor : '#374151'};flex:1;line-height:1.4;">${escHtml(label)}</span>
         <span style="font-size:7pt;font-weight:700;color:${isTop ? 'white' : '#6B7280'};background:${isTop ? primaryColor : '#F3F4F6'};padding:1px 6px;border-radius:9999px;white-space:nowrap;flex-shrink:0;">${count}Q</span>
+        <span class="toc-pg" style="
+          font-size:7pt;font-weight:700;
+          color:${isTop ? primaryColor : '#6B7280'};
+          background:${isTop ? primaryColor + '15' : '#F3F4F6'};
+          border:1px solid ${isTop ? primaryColor + '30' : '#E5E7EB'};
+          padding:1px 7px;border-radius:9999px;
+          white-space:nowrap;flex-shrink:0;
+          min-width:30px;text-align:center;
+          -webkit-print-color-adjust:exact;print-color-adjust:exact;
+        ">—</span>
       </div>
     </a>`;
   }).join('');
@@ -1536,6 +1546,52 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       </tfoot>
     </table>
   </div>
+  <script>
+  (function () {
+    // A4 page height in CSS pixels at 96 dpi: 297mm × (96 / 25.4) px/mm
+    var PAGE_H_PX = 297 * 96 / 25.4;
+
+    /**
+     * Walk the offsetParent chain to get an element's absolute Y position
+     * from the top of the document. More reliable than getBoundingClientRect()
+     * in Chromium's print/beforeprint context where the viewport may differ.
+     */
+    function absoluteTop(el) {
+      var top = 0;
+      var node = el;
+      while (node) {
+        top += node.offsetTop || 0;
+        node = node.offsetParent;
+      }
+      return top;
+    }
+
+    function fillTocPageNumbers() {
+      var rows = document.querySelectorAll('[data-toc-page-slug]');
+      rows.forEach(function (row) {
+        var slug   = row.getAttribute('data-toc-page-slug');
+        var anchor = document.getElementById('topic-' + slug);
+        var pgSpan = row.querySelector('.toc-pg');
+        if (!anchor || !pgSpan) return;
+        var absY    = absoluteTop(anchor);
+        var pageNum = Math.floor(absY / PAGE_H_PX) + 1;
+        // Never show page 0 (safety guard for anchors at Y=0 before the TOC itself)
+        pgSpan.textContent = String(Math.max(1, pageNum));
+      });
+    }
+
+    // Chromium fires 'beforeprint' before rasterising each page — all layout is
+    // already final at this point, so element positions are correct.
+    window.addEventListener('beforeprint', fillTocPageNumbers);
+
+    // Fallback for preview/screen mode (iframe srcdoc path)
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fillTocPageNumbers);
+    } else {
+      fillTocPageNumbers();
+    }
+  })();
+  </script>
 </body>
 </html>`;
 }
