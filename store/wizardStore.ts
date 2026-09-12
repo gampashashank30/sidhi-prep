@@ -128,12 +128,53 @@ export const useWizardStore = create<WizardState>((set, get) => ({
       });
     }
 
-    // Random Segregation ON — Fisher-Yates shuffle (new array, never mutates store state)
-    const shuffled = [...filtered];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    // Random Segregation ON — group-aware Fisher-Yates shuffle.
+    //
+    // A comprehension / direction group must move as ONE atomic unit:
+    // all questions in the group stay together in original relative order,
+    // but the group as a whole can land anywhere among the shuffled output.
+    // Standalone questions each move individually.
+    //
+    // Algorithm:
+    //   1. Build "units": each unit is either [singleQuestion] or [q1, q2, q3 …]
+    //      for a passage group (identified by a unique groupRange key).
+    //   2. Fisher-Yates shuffle the units array.
+    //   3. Flatten back to a flat question array.
+    //
+    // The groupRange key uses the globally-offset numbers that route.ts produces
+    // (e.g. "6-10" for Doc2's group), so units from different documents
+    // can never accidentally merge into the same slot.
+
+    // Step 1 — partition into units, preserving order within each group.
+    type Unit = Question[];
+    const unitMap = new Map<string, Unit>(); // groupKey → ordered questions
+    const unitOrder: (string | '__standalone__')[] = []; // insertion order of unit keys
+
+    for (const q of filtered) {
+      if (q.groupRange) {
+        const gk = `${q.groupRange[0]}-${q.groupRange[1]}`;
+        if (!unitMap.has(gk)) {
+          unitMap.set(gk, []);
+          unitOrder.push(gk);
+        }
+        unitMap.get(gk)!.push(q);
+      } else {
+        // Each standalone question is its own unit; use a unique key.
+        const sk = `__standalone__${q.number}`;
+        unitMap.set(sk, [q]);
+        unitOrder.push(sk);
+      }
     }
-    return shuffled;
+
+    // Step 2 — collect units in insertion order, then Fisher-Yates on units.
+    const units: Unit[] = unitOrder.map((key) => unitMap.get(key)!);
+    for (let i = units.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [units[i], units[j]] = [units[j], units[i]];
+    }
+
+    // Step 3 — flatten.
+    return units.flat();
   },
+
 }));

@@ -65,12 +65,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(results[0]);
     }
 
-    // Multiple files — merge and renumber questions sequentially
+    // Multiple files — merge and renumber questions sequentially.
+    // Also shift groupRange by the same offset so that Doc1's [1,5] and
+    // Doc2's [1,5] never share the same group key — they become [1,5] and [6,10].
     let questionOffset = 0;
     const mergedQuestions = results.flatMap((r) => {
       const renumbered = r.questions.map((q, idx) => ({
         ...q,
         number: questionOffset + idx + 1,
+        // Shift groupRange so each document's comprehension groups are globally unique.
+        // Without this, two documents both having D.1-5 would collide on key "1-5".
+        ...(q.groupRange
+          ? {
+              groupRange: [
+                q.groupRange[0] + questionOffset,
+                q.groupRange[1] + questionOffset,
+              ] as [number, number],
+            }
+          : {}),
       }));
       questionOffset += r.questions.length;
       return renumbered;
