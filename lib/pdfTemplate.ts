@@ -1,4 +1,4 @@
-// lib/pdfTemplate.ts — v3 (Correct Architecture)
+﻿// lib/pdfTemplate.ts — v3 (Correct Architecture)
 //
 // ARCHITECTURE CHANGE FROM v2:
 // ✗ OLD: Fixed-height page boxes with overflow:hidden (clips content, breaks links)
@@ -752,6 +752,7 @@ function renderTOC(
     return `<a href="#topic-${slug}" data-toc-page-slug="${slug}" style="
       display:block;
       text-decoration:none;
+      cursor:pointer;
       break-inside:avoid;page-break-inside:avoid;
       padding:${isTop ? 6 : 4}px 10px ${isTop ? 6 : 4}px ${paddingLeft}px;
       border-bottom:0.5px solid ${isTop ? primaryColor + '25' : '#E5E7EB'};
@@ -761,7 +762,7 @@ function renderTOC(
         ${isTop
           ? `<span style="width:3px;height:16px;background:${primaryColor};border-radius:2px;flex-shrink:0;"></span>`
           : `<span style="width:5px;height:5px;border-radius:50%;background:${accentColor};flex-shrink:0;margin-left:4px;opacity:0.7;"></span>`}
-        <span style="font-size:${isTop ? 9 : 8}pt;font-weight:${isTop ? 700 : 500};color:${isTop ? primaryColor : '#374151'};flex:1;line-height:1.4;">${escHtml(label)}</span>
+        <span style="font-size:${isTop ? 9 : 8}pt;font-weight:${isTop ? 700 : 500};color:${isTop ? primaryColor : '#374151'};flex:1;line-height:1.4;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:${isTop ? primaryColor + '60' : '#9CA3AF'};text-underline-offset:2px;">${escHtml(label)}</span>
         <span style="font-size:7pt;font-weight:700;color:${isTop ? 'white' : '#6B7280'};background:${isTop ? primaryColor : '#F3F4F6'};padding:1px 6px;border-radius:9999px;white-space:nowrap;flex-shrink:0;">${count}Q</span>
         <span class="toc-pg" style="
           font-size:7pt;font-weight:700;
@@ -773,6 +774,9 @@ function renderTOC(
           min-width:30px;text-align:center;
           -webkit-print-color-adjust:exact;print-color-adjust:exact;
         ">${pgText}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="10" height="10" fill="none" style="flex-shrink:0;opacity:${isTop ? '0.7' : '0.4'};">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="${isTop ? primaryColor : '#6B7280'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
     </a>`;
   }).join('');
