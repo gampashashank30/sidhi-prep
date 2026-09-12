@@ -28,8 +28,22 @@ function escHtml(str: string): string {
 export function renderMath(raw: string): string {
   if (!raw) return '';
 
+  // \u2500\u2500 Step 0: Protect embedded doc-table HTML from escaping \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Tables are resolved from [TBL:TN] tokens to actual HTML by parser.ts and
+  // stored inline in question.text / explanation / passageText.
+  // renderMath must NOT escape them \u2014 we extract them, run math rendering on
+  // the surrounding text, then re-insert the raw HTML blocks at the end.
+  const tableBlocks: string[] = [];
+  const TABLE_RE = /<table class="doc-table"[\s\S]*?<\/table>/g;
+  const rawWithPlaceholders = raw.replace(TABLE_RE, (match) => {
+    const idx = tableBlocks.length;
+    tableBlocks.push(match);
+    return `\x00TBL${idx}\x00`; // null-byte fenced placeholder \u2014 safe; never in DOCX text
+  });
+
   // 1. Normalize Word OMML linear math markers (█, 〖, 〗, &@&)
-  const normalized = normalizeMathEquations(raw);
+  // Use rawWithPlaceholders so table blocks stay as \x00TBLn\x00 tokens
+  const normalized = normalizeMathEquations(rawWithPlaceholders);
 
   // 2. Strip markdown headings safely while preserving math delimiters
   const text = normalized
@@ -108,5 +122,17 @@ export function renderMath(raw: string): string {
     out.push(escHtml(unescapeMarkdown(text.slice(lastIdx))).replace(/\n/g, '<br/>'));
   }
 
-  return out.join('');
+  // ── Step 3: Re-insert protected table HTML blocks ────────────────────────────
+  // Substitute \x00TBLn\x00 placeholders back with the original raw HTML.
+  // Use a wrapper div with break-inside:avoid so tables don't split across pages.
+  let result = out.join('');
+  if (tableBlocks.length > 0) {
+    result = result.replace(/\x00TBL(\d+)\x00/g, (_, idxStr) => {
+      const idx = parseInt(idxStr, 10);
+      const tableHtml = tableBlocks[idx] ?? '';
+      return `<div style="break-inside:avoid;page-break-inside:avoid;overflow-x:auto;max-width:100%;">${tableHtml}</div>`;
+    });
+  }
+
+  return result;
 }

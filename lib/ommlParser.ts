@@ -1,4 +1,4 @@
-// lib/ommlParser.ts — Universal DOCX Parser: Text + Inline Images
+// lib/ommlParser.ts — Universal DOCX Parser: Text + Inline Images + Tables
 //
 // Reads word/document.xml directly from a .docx buffer and:
 // 1. Transforms native Word Equation Editor structures (OMML) into LaTeX $...$
@@ -14,7 +14,7 @@ import { DOMParser } from '@xmldom/xmldom';
 // ─── Return type ──────────────────────────────────────────────────────────────
 
 export interface DocxParseResult {
-  /** Paragraph strings with [IMG:rIdXX] tokens embedded where images appear */
+  /** Paragraph strings with [IMG:rIdXX] and [TBL:TN] tokens embedded inline */
   paragraphs: string[];
   /**
    * Map of relationship ID → base64 data URL.
@@ -22,6 +22,12 @@ export interface DocxParseResult {
    * Works for any image type: png, jpeg, gif, emf, wmf, svg
    */
   imageMap: Record<string, string>;
+  /**
+   * Map of table token key → safe HTML string.
+   * e.g. { "T1": "<table class=\"doc-table\">...</table>" }
+   * Tokens appear in paragraphs as [TBL:T1], [TBL:T2], etc.
+   */
+  tableHtmlMap: Record<string, string>;
 }
 
 // ─── MIME type detection ──────────────────────────────────────────────────────
@@ -169,32 +175,77 @@ function ommlElementToLatex(node: Node): string {
     }
 
     case 'd': {
-      // Delimiter / Parentheses
+      // Delimiter / Parentheses — may wrap a matrix (m:m) child
       let beg = '(';
       let end = ')';
-      let elem = '';
+      const eChildren: Node[] = [];
 
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes[i];
         const childTag = child.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
         if (childTag === 'dPr') {
           const begNode = (child as Element).getElementsByTagName('m:begChr')[0];
-          if (begNode && begNode.getAttribute('m:val')) {
-            beg = begNode.getAttribute('m:val')!;
+          if (begNode && begNode.getAttribute('m:val') !== null) {
+            beg = begNode.getAttribute('m:val') ?? '(';
           }
           const endNode = (child as Element).getElementsByTagName('m:endChr')[0];
-          if (endNode && endNode.getAttribute('m:val')) {
-            end = endNode.getAttribute('m:val')!;
+          if (endNode && endNode.getAttribute('m:val') !== null) {
+            end = endNode.getAttribute('m:val') ?? ')';
           }
         } else if (childTag === 'e') {
-          elem += ommlElementToLatex(child);
+          eChildren.push(child);
         }
       }
-      return `\\left${beg} ${elem.trim()} \\right${end}`;
+
+      // Check if the single 'e' child contains an m:m matrix node
+      // If so, pick the proper LaTeX matrix environment based on brackets
+      if (eChildren.length === 1) {
+        const eNode = eChildren[0];
+        let matrixNode: Node | null = null;
+        for (let k = 0; k < eNode.childNodes.length; k++) {
+          const t = eNode.childNodes[k].nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+          if (t === 'm') { matrixNode = eNode.childNodes[k]; break; }
+        }
+        if (matrixNode) {
+          // Determine environment from bracket characters
+          let env = 'pmatrix'; // default: ()
+          if (beg === '[' || beg === '\u005b') env = 'bmatrix'; // []
+          else if (beg === '|') env = 'vmatrix';                  // ||
+          else if (beg === '\u2016') env = 'Vmatrix';            // ‖‖
+          else if (beg === '\u230a' || beg === '\u2308') env = 'bmatrix'; // ⌊⌈
+          else if (beg === '{') env = 'Bmatrix';                  // {}
+
+          const rows: string[] = [];
+          for (let i = 0; i < matrixNode.childNodes.length; i++) {
+            const child = matrixNode.childNodes[i];
+            const ct = child.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+            if (ct === 'mr') {
+              const cells: string[] = [];
+              for (let j = 0; j < child.childNodes.length; j++) {
+                const cell = child.childNodes[j];
+                if (cell.nodeName.replace(/^[a-zA-Z0-9]+:/, '') === 'e') {
+                  cells.push(ommlElementToLatex(cell));
+                }
+              }
+              rows.push(cells.join(' & '));
+            }
+          }
+          return `\\begin{${env}} ${rows.join(' \\\\ ')} \\end{${env}}`;
+        }
+      }
+
+      // Not a matrix — regular delimiter
+      const elem = eChildren.map(e => ommlElementToLatex(e)).join('');
+      const leftDelim  = beg || '.';
+      const rightDelim = end || '.';
+      return `\\left${leftDelim} ${elem.trim()} \\right${rightDelim}`;
     }
 
     case 'm': {
-      // Matrix / Equation Array
+      // Matrix / Equation Array — detect enclosing delimiter to pick correct env
+      // The parent node (m:d) holds bracket characters in m:dPr > m:begChr/m:endChr.
+      // We inspect the parent passed in from the 'd' case handler below.
+      // Default: use \begin{matrix} (no brackets) — caller wraps in m:d if needed.
       const rows: string[] = [];
       for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes[i];
@@ -211,7 +262,8 @@ function ommlElementToLatex(node: Node): string {
           rows.push(cells.join(' & '));
         }
       }
-      return `\\begin{aligned} ${rows.join(' \\\\ ')} \\end{aligned}`;
+      // Default environment when not inside an m:d delimiter context
+      return `\\begin{matrix} ${rows.join(' \\\\ ')} \\end{matrix}`;
     }
 
     case 'nary': {
@@ -448,17 +500,17 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
   const relsMap  = await buildRelationshipMap(zip);
   const imageMap = await extractImages(zip, relsMap);
 
-  // ── 3. Walk paragraphs, emit text + [IMG:rIdXX] tokens ───────────────────
-  const paragraphNodes = doc.getElementsByTagName('w:p');
+  // ── 3. Walk w:body direct children in document order ─────────────────────
+  // This preserves the true reading order (tables are NOT flattened into
+  // disconnected paragraphs like the old getElementsByTagName('w:p') approach).
+  const tableHtmlMap: Record<string, string> = {};
+  let tableCounter = 0;
   const paragraphs: string[] = [];
 
-  for (let pIdx = 0; pIdx < paragraphNodes.length; pIdx++) {
-    const pNode = paragraphNodes.item(pIdx);
-    if (!pNode) continue;
-
+  // ── Helper: process a single <w:p> node into a text string ─────────────────
+  function processParagraph(pNode: Node): string {
     let paraText = '';
 
-    // Walk all direct children of <w:p>
     for (let cIdx = 0; cIdx < pNode.childNodes.length; cIdx++) {
       const child = pNode.childNodes.item(cIdx);
       if (!child || child.nodeType !== 1) continue;
@@ -467,86 +519,56 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
 
       switch (tag) {
         case 'oMathPara': {
-          // Block math equation paragraph
           const latex = ommlElementToLatex(child);
-          if (latex.trim()) {
-            paraText += ` $$${latex.trim()}$$ `;
-          }
+          if (latex.trim()) paraText += ` $$${latex.trim()}$$ `;
           break;
         }
-
         case 'oMath': {
-          // Inline math equation
           const latex = ommlElementToLatex(child);
-          if (latex.trim()) {
-            paraText += ` $${latex.trim()}$ `;
-          }
+          if (latex.trim()) paraText += ` $${latex.trim()}$ `;
           break;
         }
-
         case 'r': {
-          // Regular text run — may contain text AND/OR a drawing
           for (let rIdx = 0; rIdx < child.childNodes.length; rIdx++) {
             const rChild = child.childNodes.item(rIdx);
             if (!rChild || rChild.nodeType !== 1) continue;
-
             const rTag = rChild.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
-
             if (rTag === 't') {
-              // Text node — sanitize Word special characters
-              if (rChild.textContent) {
-                paraText += sanitizeText(rChild.textContent);
-              }
+              if (rChild.textContent) paraText += sanitizeText(rChild.textContent);
             } else if (rTag === 'drawing' || rTag === 'pict') {
-              // Inline image — extract rId and emit placeholder token
               const rId = extractRIdFromDrawing(rChild);
-              if (rId && imageMap[rId]) {
-                // Only emit token if image was actually extracted successfully
-                paraText += ` [IMG:${rId}] `;
-              }
+              if (rId && imageMap[rId]) paraText += ` [IMG:${rId}] `;
             }
           }
           break;
         }
-
         case 'hyperlink': {
-          // Text inside hyperlink — sanitize
           const textNodes = (child as Element).getElementsByTagName('w:t');
           for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
             const tNode = textNodes.item(tIdx);
-            if (tNode && tNode.textContent) {
-              paraText += sanitizeText(tNode.textContent);
-            }
+            if (tNode && tNode.textContent) paraText += sanitizeText(tNode.textContent);
           }
           break;
         }
-
-        case 'ins':
-        case 'del': {
-          // Track changes — treat inserts as text, skip deletes
-          if (tag === 'ins') {
-            const textNodes = (child as Element).getElementsByTagName('w:t');
-            for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
-              const tNode = textNodes.item(tIdx);
-              if (tNode && tNode.textContent) {
-                paraText += sanitizeText(tNode.textContent);
-              }
-            }
+        case 'ins': {
+          const textNodes = (child as Element).getElementsByTagName('w:t');
+          for (let tIdx = 0; tIdx < textNodes.length; tIdx++) {
+            const tNode = textNodes.item(tIdx);
+            if (tNode && tNode.textContent) paraText += sanitizeText(tNode.textContent);
           }
           break;
         }
-
+        case 'del':
+          // Track-change deletions — skip entirely
+          break;
         default:
-          // Unknown child — try to extract any text from it (graceful degradation)
           break;
       }
     }
 
-    // Also handle <w:drawing> or <w:pict> that appear as DIRECT children of <w:p>
-    // (some Word versions do this for anchored images)
-    const directDrawings = (pNode as Element).childNodes;
-    for (let dIdx = 0; dIdx < directDrawings.length; dIdx++) {
-      const dChild = directDrawings.item(dIdx);
+    // Also catch anchored <w:drawing>/<w:pict> that are direct children of <w:p>
+    for (let dIdx = 0; dIdx < pNode.childNodes.length; dIdx++) {
+      const dChild = pNode.childNodes.item(dIdx);
       if (!dChild || dChild.nodeType !== 1) continue;
       const dTag = dChild.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
       if (dTag === 'drawing' || dTag === 'pict') {
@@ -557,11 +579,227 @@ export async function parseDocxWithOmml(buffer: Buffer): Promise<DocxParseResult
       }
     }
 
-    const trimmed = paraText.trim();
-    if (trimmed.length > 0) {
-      paragraphs.push(trimmed);
-    }
+    return paraText.trim();
   }
 
-  return { paragraphs, imageMap };
+  // ── Helper: convert cell text (from all its w:p children) to plain string ──
+  function cellText(tcNode: Node): string {
+    const parts: string[] = [];
+    for (let i = 0; i < tcNode.childNodes.length; i++) {
+      const ch = tcNode.childNodes.item(i);
+      if (!ch) continue;
+      const t = ch.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+      if (t === 'p') {
+        const txt = processParagraph(ch);
+        if (txt) parts.push(txt);
+      }
+      // Nested tables inside a cell are flattened to "[Table]" placeholder
+      if (t === 'tbl') parts.push('[Table]');
+    }
+    return parts.join('<br/>');
+  }
+
+  // ── Helper: parse <w:tbl> and return safe HTML string ──────────────────────
+  // Handles: colspan (w:gridSpan), rowspan (w:vMerge), math inside cells,
+  // images inside cells, multi-paragraph cells.
+  function parseTableNode(tblNode: Node): string {
+    // ── First pass: collect all rows and cells with metadata ────────────────
+    // We need a two-pass approach to compute rowspans (vMerge):
+    //   Pass 1: build a 2D grid of { text, colspan, isVMergeRestart, isVMergeContinue }
+    //   Pass 2: compute actual rowspan values by scanning downward
+    type RawCell = {
+      text: string;
+      colspan: number;
+      isVMergeRestart: boolean;
+      isVMergeContinue: boolean;
+    };
+    const rawRows: RawCell[][] = [];
+
+    for (let rIdx = 0; rIdx < tblNode.childNodes.length; rIdx++) {
+      const rowNode = tblNode.childNodes.item(rIdx);
+      if (!rowNode) continue;
+      const rowTag = rowNode.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+      if (rowTag !== 'tr') continue;
+
+      const rawCells: RawCell[] = [];
+      for (let cIdx = 0; cIdx < rowNode.childNodes.length; cIdx++) {
+        const cellNode = rowNode.childNodes.item(cIdx);
+        if (!cellNode) continue;
+        const cellTag = cellNode.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+        if (cellTag !== 'tc') continue;
+
+        // ── Read cell properties ────────────────────────────────────────────
+        let colspan = 1;
+        let isVMergeRestart = false;
+        let isVMergeContinue = false;
+
+        const tcPr = (cellNode as Element).getElementsByTagName('w:tcPr')[0];
+        if (tcPr) {
+          // Horizontal span
+          const gridSpan = tcPr.getElementsByTagName('w:gridSpan')[0];
+          if (gridSpan) {
+            const val = parseInt(gridSpan.getAttribute('w:val') ?? '1', 10);
+            if (val > 1) colspan = val;
+          }
+          // Vertical merge
+          const vMerge = tcPr.getElementsByTagName('w:vMerge')[0];
+          if (vMerge) {
+            const val = vMerge.getAttribute('w:val');
+            if (val === 'restart') {
+              isVMergeRestart = true;
+            } else {
+              // val is null or 'continue' — this cell is a continuation
+              isVMergeContinue = true;
+            }
+          }
+        }
+
+        // ── Extract cell content ────────────────────────────────────────────
+        const text = isVMergeContinue ? '' : cellText(cellNode);
+
+        rawCells.push({ text, colspan, isVMergeRestart, isVMergeContinue });
+      }
+
+      if (rawCells.length > 0) rawRows.push(rawCells);
+    }
+
+    if (rawRows.length === 0) return ''; // empty table
+
+    // ── Second pass: compute rowspan by looking ahead ──────────────────────
+    // We build a flat list of { rowIndex, cellIndex, rowspan } for restart cells
+    type SpanInfo = { rowspan: number };
+    // grid[rowIdx][colPos] = SpanInfo | null
+    // We only need rowspan, so we compute it per raw-cell position.
+    const rowspanGrid: (SpanInfo | null)[][] = rawRows.map(() => []);
+
+    for (let ri = 0; ri < rawRows.length; ri++) {
+      for (let ci = 0; ci < rawRows[ri].length; ci++) {
+        const cell = rawRows[ri][ci];
+        if (cell.isVMergeRestart) {
+          // Count how many consecutive rows below have a vMergeContinue in same col position
+          let span = 1;
+          for (let rj = ri + 1; rj < rawRows.length; rj++) {
+            if (ci < rawRows[rj].length && rawRows[rj][ci].isVMergeContinue) {
+              span++;
+            } else {
+              break;
+            }
+          }
+          rowspanGrid[ri][ci] = { rowspan: span };
+        } else if (cell.isVMergeContinue) {
+          rowspanGrid[ri][ci] = null; // skip rendering
+        } else {
+          rowspanGrid[ri][ci] = { rowspan: 1 };
+        }
+      }
+    }
+
+    // ── Detect header row: first row has bold text in all/most cells ────────
+    // Simple heuristic: if the first row cells contain <strong> or are ALL CAPS
+    // we treat it as a header row (<th> instead of <td>).
+    // Since we don't have run-level bold detection here (we'd need to inspect
+    // w:rPr > w:b), we use a content heuristic: first row = header when ≥ 2 cells
+    // and none of them look like data (numbers, options, etc.).
+    const isHeaderRow = (ri: number): boolean => {
+      if (ri !== 0) return false;
+      const row = rawRows[0];
+      if (row.length < 2) return false;
+      // If all cells are short and contain no math/images, treat as header
+      const allShort = row.every(c => c.text.length < 60 && !c.text.includes('[IMG:'));
+      return allShort;
+    };
+
+    // ── Determine column count ──────────────────────────────────────────────
+    const colCount = Math.max(...rawRows.map(row =>
+      row.reduce((sum, c) => sum + c.colspan, 0)
+    ));
+
+    // ── Render HTML table ───────────────────────────────────────────────────
+    // Style: compact, respects 2-column PDF layout (max-width 100%),
+    // break-inside:avoid for short tables, proper border collapse.
+    const compactFont = colCount > 5 ? '6.5pt' : colCount > 3 ? '7pt' : '7.5pt';
+    const cellPad     = colCount > 5 ? '2px 3px' : '3px 6px';
+
+    let html = `<table class="doc-table" style="`
+      + `border-collapse:collapse;`
+      + `width:100%;`
+      + `max-width:100%;`
+      + `font-size:${compactFont};`
+      + `line-height:1.4;`
+      + `margin:4px 0 4px 0;`
+      + `table-layout:auto;`
+      + `word-break:break-word;`
+      + `-webkit-print-color-adjust:exact;`
+      + `print-color-adjust:exact;`
+      + `">`;
+
+    for (let ri = 0; ri < rawRows.length; ri++) {
+      const isHeader = isHeaderRow(ri);
+      const rowBg = isHeader ? 'background:#f0f4f8;' : (ri % 2 === 1 ? 'background:#fafafa;' : '');
+      html += `<tr style="${rowBg}">`;
+
+      for (let ci = 0; ci < rawRows[ri].length; ci++) {
+        const cell    = rawRows[ri][ci];
+        const spanInf = rowspanGrid[ri]?.[ci];
+
+        // Skip vMerge continuation cells — they are covered by the rowspan above
+        if (spanInf === null) continue;
+
+        const tag2    = isHeader ? 'th' : 'td';
+        const colspanAttr = cell.colspan > 1 ? ` colspan="${cell.colspan}"` : '';
+        const rowspanAttr = (spanInf?.rowspan ?? 1) > 1 ? ` rowspan="${spanInf!.rowspan}"` : '';
+        const thStyle = isHeader
+          ? `font-weight:700;background:#e8edf2;color:#1a2533;text-align:center;`
+          : `color:#1F1F1F;text-align:left;`;
+
+        html += `<${tag2}${colspanAttr}${rowspanAttr} style="`
+          + `border:1px solid #c8d0d8;`
+          + `padding:${cellPad};`
+          + `vertical-align:top;`
+          + `${thStyle}`
+          + `">${cell.text}</${tag2}>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    return html;
+  }
+
+  // ── Locate w:body ───────────────────────────────────────────────────────────
+  const bodyNodes = doc.getElementsByTagName('w:body');
+  const body = bodyNodes.item(0);
+  if (!body) return { paragraphs, imageMap, tableHtmlMap };
+
+  // ── Walk direct children of w:body in document order ───────────────────────
+  for (let idx = 0; idx < body.childNodes.length; idx++) {
+    const node = body.childNodes.item(idx);
+    if (!node || node.nodeType !== 1) continue;
+
+    const nodeName = node.nodeName.replace(/^[a-zA-Z0-9]+:/, '');
+
+    if (nodeName === 'p') {
+      // ── Paragraph ────────────────────────────────────────────────────────
+      const txt = processParagraph(node);
+      if (txt.length > 0) paragraphs.push(txt);
+
+    } else if (nodeName === 'tbl') {
+      // ── Table ─────────────────────────────────────────────────────────────
+      // Convert to HTML and store under a unique key
+      const tableHtml = parseTableNode(node);
+      if (tableHtml) {
+        tableCounter++;
+        const key = `T${tableCounter}`;
+        tableHtmlMap[key] = tableHtml;
+        // Emit the token as a standalone "paragraph" so parser.ts sees it
+        // as a separate block that won't accidentally match Q/A/Ans patterns.
+        paragraphs.push(`[TBL:${key}]`);
+      }
+
+    } else if (nodeName === 'sectPr') {
+      // Section properties — no content, skip
+    }
+    // All other body-level elements (w:sdt content controls, etc.) are skipped gracefully
+  }
+
+  return { paragraphs, imageMap, tableHtmlMap };
 }

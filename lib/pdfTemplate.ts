@@ -1,4 +1,4 @@
-﻿// lib/pdfTemplate.ts — v3 (Correct Architecture)
+// lib/pdfTemplate.ts — v3 (Correct Architecture)
 //
 // ARCHITECTURE CHANGE FROM v2:
 // ✗ OLD: Fixed-height page boxes with overflow:hidden (clips content, breaks links)
@@ -1548,6 +1548,33 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
       .page-content-container {
         width: 100%;
       }
+    }
+    /* ── DOCX table styles (tables parsed from uploaded Word documents) ── */
+    .doc-table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 100%;
+      table-layout: auto;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      margin: 4px 0;
+    }
+    .doc-table th,
+    .doc-table td {
+      border: 1px solid #c8d0d8;
+      vertical-align: top;
+      padding: 3px 6px;
+    }
+    .doc-table th {
+      background: #e8edf2;
+      font-weight: 700;
+      color: #1a2533;
+      text-align: center;
+    }
+    .doc-table tr:nth-child(even) td {
+      background: #fafafa;
     }
   </style>
 </head>

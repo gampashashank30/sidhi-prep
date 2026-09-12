@@ -32,6 +32,39 @@ function stripImageTokens(text: string): string {
   return text.replace(/\[IMG:rId\d+\]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
 
+// ─── Table token helpers ──────────────────────────────────────────────────────
+
+/** Regex to match standalone [TBL:TN] paragraph tokens emitted by ommlParser */
+const RE_TBL_STANDALONE = /^\[TBL:(T\d+)\]$/;
+
+/** Regex to match [TBL:TN] tokens appearing inline inside text */
+const RE_TBL_INLINE = /\[TBL:(T\d+)\]/g;
+
+/**
+ * Returns true if the whole paragraph is exactly a [TBL:TN] token.
+ * These should NEVER be fed to the Q/A/Ans regex machinery.
+ */
+function isTableParagraph(para: string): boolean {
+  return RE_TBL_STANDALONE.test(para.trim());
+}
+
+/**
+ * Resolve all [TBL:TN] inline tokens in a text string to their HTML.
+ * Tokens that are not in tableHtmlMap are left as-is (safe fallback).
+ */
+function resolveTblTokens(text: string, tableHtmlMap: Record<string, string>): string {
+  RE_TBL_INLINE.lastIndex = 0;
+  return text.replace(RE_TBL_INLINE, (_, key) => tableHtmlMap[key] ?? `[TBL:${key}]`);
+}
+
+/**
+ * Strip all [TBL:TN] tokens from text for pattern-matching purposes.
+ * (So Q1., A., Ans: regexes are never accidentally triggered by table cell content.)
+ */
+function stripTblTokens(text: string): string {
+  return text.replace(/\[TBL:T\d+\]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 
 // ─── Regex patterns (from spec §2.2) ─────────────────────────────────────────
 
@@ -91,6 +124,7 @@ function normalizeDifficulty(raw: string): 'Easy' | 'Medium' | 'Hard' | null {
 export function parseQuestions(
   paragraphs: string[],
   imageMap: Record<string, string> = {},
+  tableHtmlMap: Record<string, string> = {},
 ): ParseResult {
   const questions: Question[] = [];
   const errors: ValidationError[] = [];
@@ -113,6 +147,22 @@ export function parseQuestions(
     // Skip blank / whitespace-only lines (already filtered, but belt+suspenders)
     if (!para.trim()) { i++; continue; }
 
+    // ── [TBL:TN] standalone paragraph ─────────────────────────────────────────
+    // A table that appears BEFORE the first Q in a direction block is absorbed
+    // into the passageText. A table appearing elsewhere at the top level is
+    // skipped gracefully (table-only blocks don't form question structure).
+    if (isTableParagraph(para)) {
+      if (pendingDirection) {
+        // Attach to the pending direction passage
+        const m = para.trim().match(RE_TBL_STANDALONE)!;
+        const tableHtml = tableHtmlMap[m[1]] ?? '';
+        pendingDirection.passageText += (pendingDirection.passageText ? '\n' : '') + tableHtml;
+      }
+      // Otherwise discard — a bare table outside any question context
+      i++;
+      continue;
+    }
+
     // ── Look for a direction/passage block header ──────────────────────────────
     const dirMatch = para.match(RE_DIRECTION);
     if (dirMatch) {
@@ -126,11 +176,19 @@ export function parseQuestions(
       i++;
 
       // Collect all following non-Q, non-direction lines as passage body
+      // Tables that appear here are resolved into HTML and joined into passageText
       while (i < paragraphs.length) {
         const next = paragraphs[i];
         if (RE_QUESTION.test(next))  break; // first Q of the group starts
         if (RE_DIRECTION.test(next)) break; // another direction block (shouldn't happen)
-        passageText += (passageText ? '\n' : '') + next.trim();
+        if (isTableParagraph(next)) {
+          // A table inside the direction passage — resolve to HTML
+          const tm = next.trim().match(RE_TBL_STANDALONE)!;
+          const tableHtml = tableHtmlMap[tm[1]] ?? '';
+          passageText += (passageText ? '\n' : '') + tableHtml;
+        } else {
+          passageText += (passageText ? '\n' : '') + next.trim();
+        }
         i++;
       }
 
@@ -156,13 +214,21 @@ export function parseQuestions(
       if (RE_OPT_A.test(next)) break;    // Found option A — stop
       if (RE_ANY_OPT.test(next)) break;  // Found some other option — stop
       if (RE_QUESTION.test(next)) break; // Next question started — malformed
-      questionText += '\n' + next.trim();
+      // Table token inline in question body — resolve to HTML and embed
+      if (isTableParagraph(next)) {
+        const tm = next.trim().match(RE_TBL_STANDALONE)!;
+        questionText += '\n' + (tableHtmlMap[tm[1]] ?? '');
+      } else {
+        questionText += '\n' + next.trim();
+      }
       i++;
     }
 
     // ── Extract images from question text ─────────────────────────────────────
     const questionImages = extractImages(questionText, imageMap);
-    questionText = stripImageTokens(questionText);
+    // Strip both [IMG:] and [TBL:] tokens from the text used for display
+    // (images are stored separately; tables were already resolved to HTML above)
+    questionText = resolveTblTokens(stripImageTokens(questionText), tableHtmlMap);
 
     // ── Validate Q number sequence ───────────────────────────────────────────
     if (qNumber !== expectedNumber) {
@@ -200,24 +266,33 @@ export function parseQuestions(
         break;
       }
 
-      if (!re.test(line)) {
+      // For matching, strip table tokens so they never look like A./Ans:/Q lines
+      const lineForMatch = stripTblTokens(line);
+      if (!re.test(lineForMatch)) {
         blockInvalid = true;
-        const got = line.substring(0, 30).replace(/\n/g, ' ');
+        const got = lineForMatch.substring(0, 30).replace(/\n/g, ' ');
         blockInvalidReason = `Question ${qNumber} — expected option ${letter}, got: "${got}..."`;
         break;
       }
 
-      const m = line.match(re)!;
+      const m = lineForMatch.match(re)!;
       let optionText = m[1].trim();
+      // Also resolve any table tokens that were part of the original option line
+      optionText = resolveTblTokens(optionText, tableHtmlMap);
       i++;
 
       // Collect multi-line option text
       while (i < paragraphs.length) {
         const next = paragraphs[i];
-        if (RE_ANY_OPT.test(next)) break;
-        if (RE_ANSWER.test(next)) break;
-        if (RE_QUESTION.test(next)) break;
-        optionText += '\n' + next.trim();
+        if (RE_ANY_OPT.test(stripTblTokens(next))) break;
+        if (RE_ANSWER.test(stripTblTokens(next))) break;
+        if (RE_QUESTION.test(stripTblTokens(next))) break;
+        if (isTableParagraph(next)) {
+          const tm = next.trim().match(RE_TBL_STANDALONE)!;
+          optionText += '\n' + (tableHtmlMap[tm[1]] ?? '');
+        } else {
+          optionText += '\n' + next.trim();
+        }
         i++;
       }
 
@@ -264,10 +339,15 @@ export function parseQuestions(
       // Collect multi-line explanation text until Subject / Difficulty / next Q
       while (i < paragraphs.length) {
         const next = paragraphs[i];
-        if (RE_SUBJECT.test(next)) break;
-        if (RE_QUESTION.test(next)) break;
-        if (RE_DIFFICULTY.test(next)) break;
-        explanation += '\n' + next.trim();
+        if (RE_SUBJECT.test(stripTblTokens(next))) break;
+        if (RE_QUESTION.test(stripTblTokens(next))) break;
+        if (RE_DIFFICULTY.test(stripTblTokens(next))) break;
+        if (isTableParagraph(next)) {
+          const tm = next.trim().match(RE_TBL_STANDALONE)!;
+          explanation += '\n' + (tableHtmlMap[tm[1]] ?? '');
+        } else {
+          explanation += '\n' + next.trim();
+        }
         i++;
       }
 
