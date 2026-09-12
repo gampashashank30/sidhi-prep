@@ -66,6 +66,11 @@ export function renderMath(raw: string): string {
     // Pre-clean math content: balance braces & strip loose alignment ampersands
     let mathContentCleaned = fixUnbalancedBraces(mathContent.replace(/(?:^|\s)&+/g, ' ').trim());
 
+    // ── Fix: convert \frac → \dfrac so numerators & denominators are always
+    //    rendered at full font height (not shrunk to 70% in inline/textstyle mode).
+    //    \dfrac is native KaTeX and works identically in both inline and block math.
+    mathContentCleaned = mathContentCleaned.replace(/\\frac(?=\{|\s)/g, '\\dfrac');
+
     try {
       out.push(katex.renderToString(mathContentCleaned, katexOpts));
     } catch (e: any) {

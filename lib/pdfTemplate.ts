@@ -1420,9 +1420,9 @@ function wrapHtml({ body, fixedElements, layout, previewMode }: WrapOpts): strin
 
     /* ── Math Rendering & Baseline Fixes ── */
     .katex {
-      font-size: 1.02em;
-      line-height: 1.2;
-      vertical-align: -0.06em;
+      font-size: 1.1em;
+      line-height: 1.35;
+      vertical-align: -0.1em;
       margin: 0 1.5px;
     }
     .katex-display {
