@@ -76,6 +76,7 @@ export type PDFSettings = {
   // 5.3 Badges & Sections
   difficultyBadgeEnabled: boolean;
   topicBadgeEnabled: boolean;
+  questionHeadingEnabled: boolean; // show/hide the topic section heading (2nd + last tag) above question groups
   showAnswer: boolean;           // show/hide the "Ans: X" badge on each question
   includeExplanations: boolean;  // include the full explanations section in the PDF
   indexPageEnabled: boolean;     // include Table of Contents / Index page in the PDF

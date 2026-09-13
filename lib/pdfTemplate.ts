@@ -1324,14 +1324,14 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
     // Topic headings are suppressed when:
     //   (a) questions are randomly shuffled (suppressTopicHeadings flag), OR
-    //   (b) the user has turned off the topic badge — both top heading and bottom
-    //       badge are controlled by the same toggle so turning one off hides both.
-    const hideTopicUI = suppressTopicHeadings || settings.topicBadgeEnabled === false;
+    //   (b) the user has explicitly turned off Question Heading toggle.
+    // Note: topicBadgeEnabled (bottom badge) is now independent of the heading.
+    const hideHeading = suppressTopicHeadings || settings.questionHeadingEnabled === false;
 
     if (topicKey !== prevTopicKey) {
       if (q.subjectPath.length > 0) {
-        if (!hideTopicUI) {
-          // Full visible topic heading
+        if (!hideHeading) {
+          // Full visible topic heading (2nd tag small + last tag big)
           sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
         } else {
           // Heading is visually hidden but we still need anchor targets so that

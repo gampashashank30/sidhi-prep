@@ -42,6 +42,7 @@ export const DEFAULT_PDF_SETTINGS = {
   borderWidthMm: 2,
   difficultyBadgeEnabled: true,
   topicBadgeEnabled: true,
+  questionHeadingEnabled: true,
   showAnswer: true,
   includeExplanations: true,
   indexPageEnabled: true,

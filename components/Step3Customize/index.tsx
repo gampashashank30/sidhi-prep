@@ -1301,7 +1301,8 @@ export default function Step3Customize() {
           }>
             <ToggleRow id="toggle-index-page" label="Index / Table of Contents" description="Include a topic index page after the cover" value={pdfSettings.indexPageEnabled ?? true} onChange={v => update('indexPageEnabled', v)} />
             <ToggleRow id="toggle-difficulty-badge" label="Difficulty Badge" description="Easy · Medium · Hard pill on each question" value={pdfSettings.difficultyBadgeEnabled} onChange={v => update('difficultyBadgeEnabled', v)} />
-            <ToggleRow id="toggle-topic-badge" label="Topic Badge" description="Deepest subject path segment" value={pdfSettings.topicBadgeEnabled} onChange={v => update('topicBadgeEnabled', v)} />
+            <ToggleRow id="toggle-topic-badge" label="Topic Badge" description="Deepest subject path segment — breadcrumb pill on each question" value={pdfSettings.topicBadgeEnabled} onChange={v => update('topicBadgeEnabled', v)} />
+            <ToggleRow id="toggle-question-heading" label="Question Heading" description="Section heading above each topic group (2nd & last tag)" value={pdfSettings.questionHeadingEnabled ?? true} onChange={v => update('questionHeadingEnabled', v)} />
             <ToggleRow id="toggle-show-answer" label="Show Answer" description='Display the "Ans: A/B/C/D" badge on each question' value={pdfSettings.showAnswer} onChange={v => update('showAnswer', v)} />
             <ToggleRow id="toggle-explanations" label="Include Explanations Section" description="Append a full explanations page at the end of the PDF" value={pdfSettings.includeExplanations} onChange={v => update('includeExplanations', v)} />
           </SettingsSection>
