@@ -18,7 +18,19 @@ function mergeResults(results: { file: File; result: ParseResult }[]): ParseResu
   const mergedQuestions = results.flatMap(({ result }) => {
     const renumbered = result.questions.map((q, idx) => ({
       ...q,
+      // Renumber the question sequentially across all merged docs
       number: offset + idx + 1,
+      // CRITICAL: also offset groupRange so that two docs both having D.1-5)
+      // produce distinct keys [1,5] and [6,10] instead of colliding on "1-5".
+      // Without this fix:
+      //   - PDF renderer merges both passage blocks under the same header
+      //   - Random shuffle treats all 10 questions as a single passage unit
+      ...(q.groupRange && {
+        groupRange: [
+          q.groupRange[0] + offset,
+          q.groupRange[1] + offset,
+        ] as [number, number],
+      }),
     }));
     offset += result.questions.length;
     return renumbered;
