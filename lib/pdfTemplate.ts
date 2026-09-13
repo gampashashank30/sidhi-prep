@@ -612,8 +612,23 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
 
 function renderTopicHeading(path: string[], primaryColor: string, emittedSlugs: Set<string>): string {
   const fullSlug = slugify(path);
+
+  // Heading display rules:
+  //  • 3+ tags (e.g. English › Vocabulary › Antonyms):
+  //      small label above = 2nd tag (index 1)   → "Vocabulary"
+  //      big heading       = last tag             → "Antonyms"
+  //  • 2 tags (e.g. English › Grammar):
+  //      small label above = 1st tag (index 0)   → "English"
+  //      big heading       = 2nd tag (last)       → "Grammar"
+  //  • 1 tag (e.g. Reasoning):
+  //      no small label
+  //      big heading       = that tag             → "Reasoning"
   const label = path[path.length - 1];
-  const parent = path.length > 1 ? path.slice(0, -1).join(' › ') : '';
+  const parent = path.length >= 3
+    ? path[1]                          // 2nd tag for 3+ tags
+    : path.length === 2
+      ? path[0]                        // 1st tag for exactly 2 tags
+      : '';                            // nothing for single tag
 
   // Emit standalone zero-height <a name> anchors for all PREFIX slugs (depth 1..N-1).
   // The full-depth slug (d === path.length) is already on the <h2> itself — emitting
