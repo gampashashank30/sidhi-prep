@@ -41,7 +41,7 @@ export const DEFAULT_PDF_SETTINGS = {
   borderStyle: 'solid' as const,
   borderWidthMm: 2,
   difficultyBadgeEnabled: true,
-  topicBadgeEnabled: true,
+  topicBadgeEnabled: false,
   questionHeadingEnabled: true,
   showAnswer: true,
   includeExplanations: true,
