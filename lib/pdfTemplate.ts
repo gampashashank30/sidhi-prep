@@ -584,6 +584,31 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
   // Question body images (rendered below the question text, before options)
   const questionBodyImages = renderInlineImages(q.images);
 
+  // ── Inline topic heading (shown on every question) ──────────────────────────
+  // Derives small-label + big-label from subjectPath using the same rules as
+  // the section-separator heading — but rendered as a compact inline block
+  // inside the question card, not as a standalone <h2> band.
+  let inlineTopicHeading = '';
+  if (settings.topicBadgeEnabled !== false && q.subjectPath.length > 0) {
+    const path = q.subjectPath;
+    const bigLabel = path[path.length - 1];
+    const smallLabel = path.length >= 3
+      ? path[1]          // 2nd tag for 3+ tags  (e.g. English › Vocabulary › Antonyms → "Vocabulary")
+      : path.length === 2
+        ? path[0]        // 1st tag for 2 tags    (e.g. English › Grammar → "English")
+        : '';            // no small label for 1 tag
+    inlineTopicHeading = `<div style="
+      background:${primaryColor}15;
+      border-left:3px solid ${primaryColor};
+      padding:4px 8px;
+      margin:0 0 4px 0;
+      position:relative;z-index:2;
+    ">
+      ${smallLabel ? `<div style="font-size:6.5pt;color:#888;margin-bottom:1px;">${escHtml(smallLabel)}</div>` : ''}
+      <div style="font-weight:700;font-size:9.5pt;color:${primaryColor};">${escHtml(bigLabel)}</div>
+    </div>`;
+  }
+
   // FIX: Use a standalone zero-height <a id/name> anchor BEFORE the block div.
   return `<a id="q-${q.number}" name="q-${q.number}" style="display:block;height:0;overflow:hidden;line-height:0;font-size:0;"></a><div style="
     break-inside:avoid;
@@ -593,6 +618,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
     position:relative;z-index:2;
     ${q.passageText ? `border-left:2px solid ${primaryColor}40;padding-left:6px;` : ''}
   ">
+    ${inlineTopicHeading}
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
       <div style="flex:1;min-width:0;">
         <span style="font-weight:700;color:${primaryColor};font-size:8.5pt;">Q${displayNumber}. </span><span style="color:${NEUTRAL_TEXT};font-size:8.5pt;word-break:break-word;">${renderMath(stripMarkdown(q.text))}</span>
@@ -1330,14 +1356,9 @@ export function buildHTMLTemplate(opts: TemplateOptions): string {
 
     if (topicKey !== prevTopicKey) {
       if (q.subjectPath.length > 0) {
-        if (!hideTopicUI) {
-          // Full visible topic heading
-          sections.push(renderTopicHeading(q.subjectPath, primaryColor, emittedTopicSlugs));
-        } else {
-          // Heading is visually hidden but we still need anchor targets so that
-          // TOC (index page) links resolve correctly in the PDF.
-          sections.push(renderTopicAnchorsOnly(q.subjectPath, emittedTopicSlugs));
-        }
+        // Always emit invisible anchor tags so TOC links resolve correctly.
+        // The visible heading is now rendered per-question inside renderQuestionBlock.
+        sections.push(renderTopicAnchorsOnly(q.subjectPath, emittedTopicSlugs));
       }
       prevTopicKey = topicKey;
     }
