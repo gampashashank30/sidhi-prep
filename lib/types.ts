@@ -86,6 +86,7 @@ export type PDFSettings = {
     instagram: string;
     youtube: string;
     telegram: string;
+    whatsapp: string;
     playStore: string;
     appStore: string;
     microsoftStore: string;

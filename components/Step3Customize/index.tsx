@@ -970,12 +970,13 @@ export default function Step3Customize() {
 
 
   const socialFields: Array<{ key: keyof PDFSettings['socialLinks']; label: string; placeholder: string }> = [
-    { key: 'instagram',      label: 'Instagram',        placeholder: 'https://instagram.com/...' },
-    { key: 'youtube',        label: 'YouTube',          placeholder: 'https://youtube.com/...' },
-    { key: 'telegram',       label: 'Telegram',         placeholder: 'https://t.me/...' },
-    { key: 'playStore',      label: 'Google Play Store', placeholder: 'https://play.google.com/...' },
-    { key: 'appStore',       label: 'Apple App Store',  placeholder: 'https://apps.apple.com/...' },
-    { key: 'microsoftStore', label: 'Microsoft Store',  placeholder: 'https://apps.microsoft.com/...' },
+    { key: 'instagram',      label: 'Instagram',          placeholder: 'https://instagram.com/...' },
+    { key: 'youtube',        label: 'YouTube',            placeholder: 'https://youtube.com/...' },
+    { key: 'telegram',       label: 'Telegram',           placeholder: 'https://t.me/...' },
+    { key: 'whatsapp',       label: 'WhatsApp Channel',   placeholder: 'https://whatsapp.com/channel/...' },
+    { key: 'playStore',      label: 'Google Play Store',  placeholder: 'https://play.google.com/...' },
+    { key: 'appStore',       label: 'Apple App Store',    placeholder: 'https://apps.apple.com/...' },
+    { key: 'microsoftStore', label: 'Microsoft Store',    placeholder: 'https://apps.microsoft.com/...' },
   ];
 
   return (

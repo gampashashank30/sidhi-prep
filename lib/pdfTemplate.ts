@@ -129,6 +129,8 @@ const SOCIAL_ICONS: Record<string, string> = {
   appStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#000"/><path fill="white" d="M16.05 12.86c-.02-1.9 1.55-2.82 1.62-2.87-0.88-1.29-2.26-1.47-2.75-1.49-1.17-.12-2.29.69-2.88.69-.6 0-1.52-.67-2.5-.65-1.28.02-2.47.75-3.13 1.9-1.34 2.33-.34 5.77.96 7.66.64.92 1.4 1.96 2.4 1.92.96-.04 1.33-.62 2.49-.62 1.17 0 1.5.62 2.52.6 1.03-.02 1.68-.94 2.31-1.87.73-1.07 1.03-2.11 1.05-2.17-.02-.01-2.07-.8-2.09-3.1zm-1.96-5.7c.53-.65.89-1.55.79-2.45-.77.03-1.7.51-2.25 1.15-.49.57-.93 1.48-.81 2.36.86.07 1.73-.44 2.27-1.06z"/></svg>`,
   // Microsoft Store — four-colour Windows logo on white rounded square
   microsoftStore: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#fff" stroke="#E2E8F0" stroke-width="1"/><rect x="3.5" y="3.5" width="7.5" height="7.5" fill="#F35325"/><rect x="13" y="3.5" width="7.5" height="7.5" fill="#81BC06"/><rect x="3.5" y="13" width="7.5" height="7.5" fill="#05A6F0"/><rect x="13" y="13" width="7.5" height="7.5" fill="#FFBA08"/></svg>`,
+  // WhatsApp — official green rounded-square with white phone-speech-bubble
+  whatsapp: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;"><rect width="24" height="24" rx="5.5" fill="#25D366"/><path fill="white" d="M12 3.8A8.2 8.2 0 0 0 4.8 16.3L3.5 20.5l4.3-1.3A8.2 8.2 0 1 0 12 3.8zm0 15a6.7 6.7 0 0 1-3.4-.93l-.24-.15-2.55.77.77-2.49-.16-.25A6.75 6.75 0 1 1 12 18.8zm3.7-5.05c-.2-.1-1.19-.59-1.37-.65-.18-.07-.32-.1-.45.1s-.52.65-.64.79-.23.14-.43.05a5.4 5.4 0 0 1-1.6-1 6 6 0 0 1-1.11-1.38c-.12-.2 0-.31.09-.41s.2-.23.3-.35a1.4 1.4 0 0 0 .2-.33.37.37 0 0 0-.02-.35c-.05-.1-.45-1.08-.62-1.48s-.33-.34-.45-.35h-.39a.75.75 0 0 0-.54.25 2.28 2.28 0 0 0-.71 1.7 3.95 3.95 0 0 0 .83 2.1 9.05 9.05 0 0 0 3.47 3.06c.48.21.86.33 1.15.42a2.78 2.78 0 0 0 1.28.08 2.1 2.1 0 0 0 1.37-1 1.69 1.69 0 0 0 .12-.96c-.05-.09-.18-.14-.38-.24z"/></svg>`,
 };
 
 // Each icon is wrapped in a 7mm × 7mm div for consistent, large display in the footer
@@ -137,6 +139,7 @@ function buildSocialItems(links: PDFSettings['socialLinks'], accentColor: string
     `<a href="${escHtml(href)}" style="display:inline-flex;width:7mm;height:7mm;flex-shrink:0;text-decoration:none;pointer-events:auto;" title="">${icon}</a>`;
   const items: string[] = [];
   if (links.telegram)       items.push(wrap(SOCIAL_ICONS.telegram,       links.telegram));
+  if (links.whatsapp)       items.push(wrap(SOCIAL_ICONS.whatsapp,       links.whatsapp));
   if (links.instagram)      items.push(wrap(SOCIAL_ICONS.instagram,      links.instagram));
   if (links.youtube)        items.push(wrap(SOCIAL_ICONS.youtube,        links.youtube));
   if (links.playStore)      items.push(wrap(SOCIAL_ICONS.playStore,      links.playStore));
