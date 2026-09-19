@@ -9,30 +9,8 @@ import 'dotenv/config'; // loads .env.local automatically
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-async function main() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!supabaseUrl || !serviceKey) {
-    console.error('❌  SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.');
-    process.exit(1);
-  }
-  if (!adminEmail || !adminPassword) {
-    console.error('❌  ADMIN_EMAIL and ADMIN_PASSWORD must be set.');
-    process.exit(1);
-  }
-  if (adminPassword.length < 12) {
-    console.error('❌  ADMIN_PASSWORD must be at least 12 characters.');
-    process.exit(1);
-  }
-
-  const db = createClient(supabaseUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const email = adminEmail.toLowerCase().trim();
+async function seedOne(db: any, emailInput: string, passwordInput: string) {
+  const email = emailInput.toLowerCase().trim();
 
   // Check if admin already exists
   const { data: existing } = await db
@@ -43,26 +21,22 @@ async function main() {
 
   if (existing) {
     if (existing.role === 'admin') {
-      console.log(`✅  Admin already exists: ${email}`);
+      console.log(`ℹ️   Admin already exists: ${email}`);
     } else {
-      // Promote to admin
       const { error } = await db
         .from('users')
         .update({ role: 'admin', status: 'active' })
         .eq('id', existing.id);
       if (error) {
-        console.error('❌  Failed to promote user to admin:', error.message);
-        process.exit(1);
+        console.error(`❌  Failed to promote ${email} to admin:`, error.message);
+        return;
       }
       console.log(`✅  Promoted existing user to admin: ${email}`);
     }
-    process.exit(0);
+    return;
   }
 
-  // Hash the password
-  const passwordHash = await bcrypt.hash(adminPassword, 12);
-
-  // Insert the admin user
+  const passwordHash = await bcrypt.hash(passwordInput, 12);
   const { data, error } = await db
     .from('users')
     .insert({
@@ -75,16 +49,38 @@ async function main() {
     .single();
 
   if (error) {
-    console.error('❌  Failed to create admin user:', error.message);
+    console.error(`❌  Failed to create admin ${email}:`, error.message);
+    return;
+  }
+
+  console.log(`✅  Admin user created successfully: ${data.email} (ID: ${data.id})`);
+}
+
+async function main() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error('❌  SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.');
+    process.exit(1);
+  }
+  if (!adminPassword || adminPassword.length < 12) {
+    console.error('❌  ADMIN_PASSWORD must be at least 12 characters.');
     process.exit(1);
   }
 
-  console.log(`✅  Admin user created successfully:`);
-  console.log(`    Email: ${data.email}`);
-  console.log(`    ID:    ${data.id}`);
-  console.log('');
-  console.log('🔒  The plaintext password is NOT stored in the database.');
-  console.log('    Remove ADMIN_PASSWORD from your environment after seeding.');
+  const db = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  // Check if multiple emails or single email provided
+  const rawEmails = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || 'Edsiddhi03@gmail.com,Director.siddhiops@gmail.com';
+  const emails = rawEmails.split(',').map((e) => e.trim()).filter(Boolean);
+
+  for (const email of emails) {
+    await seedOne(db, email, adminPassword);
+  }
 }
 
 main().catch((err) => {
