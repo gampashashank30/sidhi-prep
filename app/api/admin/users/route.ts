@@ -72,9 +72,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate invite token' }, { status: 500 });
   }
 
-  sendInviteEmail(user.email, raw).catch((e) => {
-    console.error('[admin/users POST] Failed to send invite email:', e?.message);
-  });
+  // Send invite email — await so we can surface any error for debugging
+  try {
+    await sendInviteEmail(user.email, raw);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[admin/users POST] Failed to send invite email:', msg);
+    // Return the error so we can debug — remove this after fixing
+    return NextResponse.json(
+      { success: true, emailError: msg, user: { id: user.id, email: user.email, role: user.role, status: user.status } },
+      { status: 200 }
+    );
+  }
 
   return NextResponse.json({
     success: true,
