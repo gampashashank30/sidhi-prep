@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseQuestions, extractParagraphs } from '@/lib/parser';
 import type { ParseResult } from '@/lib/types';
+import { requireAuth } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -38,6 +39,10 @@ async function parseOneFile(file: File): Promise<ParseResult> {
 
 
 export async function POST(req: NextRequest) {
+  // Auth guard — defence-in-depth alongside middleware
+  const { error: authError } = await requireAuth();
+  if (authError) return authError;
+
   try {
     const formData = await req.formData();
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWizardStore } from '@/store/wizardStore';
 import Step1Upload from '@/components/Step1Upload';
 import Step2Cover from '@/components/Step2Cover';
@@ -8,6 +10,26 @@ import WizardNav from '@/components/shared/WizardNav';
 
 export default function Home() {
   const currentStep = useWizardStore((s) => s.currentStep);
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user) {
+          setUserEmail(d.user.email);
+          setUserRole(d.user.role);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -34,10 +56,31 @@ export default function Home() {
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
-          {/* Status badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: 'rgba(255,255,255,0.12)', borderRadius: '9999px', padding: '0.3rem 0.875rem', backdropFilter: 'blur(4px)' }}>
-            <span style={{ width: '0.5rem', height: '0.5rem', borderRadius: '50%', background: '#4ADE80', display: 'block' }} className="animate-pulse" />
-            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>Ready</span>
+          {/* User info + actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {userRole === 'admin' && (
+              <a href="/admin" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'none', fontWeight: 500, padding: '0.3rem 0.625rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.1)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              >
+                Admin
+              </a>
+            )}
+            {userEmail && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: 'rgba(255,255,255,0.12)', borderRadius: '9999px', padding: '0.3rem 0.875rem', backdropFilter: 'blur(4px)' }}>
+                <span style={{ width: '0.5rem', height: '0.5rem', borderRadius: '50%', background: '#4ADE80', display: 'block' }} className="animate-pulse" />
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: 600, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userEmail}</span>
+              </div>
+            )}
+            <button
+              id="main-logout-btn"
+              onClick={handleLogout}
+              style={{ padding: '0.3rem 0.75rem', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </header>

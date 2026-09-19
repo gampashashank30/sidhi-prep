@@ -1,0 +1,34 @@
+# render.yaml
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy this app by connecting your GitHub repo in the Render dashboard.
+
+services:
+  - type: web
+    name: sidhi-prep
+    runtime: node
+    plan: starter           # or "standard" for more RAM (PDF generation needs memory)
+    region: singapore       # choose the closest region to your users
+    branch: main
+
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+
+      # ── Fill these in the Render dashboard (not here) ──
+      - key: APP_URL
+        sync: false         # Render will auto-populate with the service URL if you use fromService
+      - key: SESSION_SECRET
+        generateValue: true # Render auto-generates a secure value (64 random chars)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false

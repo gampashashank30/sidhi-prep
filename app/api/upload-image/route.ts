@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processCoverImage, processAdImage, processInfographic } from '@/lib/imageProcessor';
+import { requireAuth } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const { error: authError } = await requireAuth();
+  if (authError) return authError;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;

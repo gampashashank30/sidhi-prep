@@ -4,12 +4,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument } from 'pdf-lib';
+import { requireAuth } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
+  const { error: authError } = await requireAuth();
+  if (authError) return authError;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file');

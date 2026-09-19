@@ -5,6 +5,8 @@ import type { PDFSettings, CoverSettings, Question } from '@/lib/types';
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
 import { renderPDF, prewarmBrowser } from '@/lib/pdfRenderer';
 import { processLogoImage } from '@/lib/imageProcessor';
+import { requireAuth } from '@/lib/auth/guard';
+import { pdfGenerationRateLimit } from '@/lib/auth/rateLimit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // PDF generation can take time
@@ -39,6 +41,19 @@ async function getLogoDataUrl(): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  // Auth guard — defence-in-depth alongside middleware
+  const { ctx, error: authError } = await requireAuth();
+  if (authError) return authError;
+
+  // Per-user PDF generation rate limit (10/hour)
+  const rl = pdfGenerationRateLimit(ctx.user.id);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'PDF generation rate limit exceeded. Please wait before generating another PDF.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
+
   try {
     // Support both JSON (fetch path) and form-encoded (mobile hidden-form path)
     const contentType = req.headers.get('content-type') ?? '';

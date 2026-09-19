@@ -6,8 +6,8 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '50mb',
     },
   },
-  // Keep puppeteer/sharp/mammoth as server-only (not bundled for client)
-  serverExternalPackages: ['puppeteer', 'sharp', 'mammoth'],
+  // Keep puppeteer/sharp/mammoth/bcryptjs as server-only (not bundled for client)
+  serverExternalPackages: ['puppeteer', 'sharp', 'mammoth', 'bcryptjs'],
 };
 
 export default nextConfig;

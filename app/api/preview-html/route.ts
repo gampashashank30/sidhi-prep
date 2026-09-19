@@ -4,6 +4,7 @@ import path from 'path';
 import type { PDFSettings, CoverSettings, Question } from '@/lib/types';
 import { buildHTMLTemplate } from '@/lib/pdfTemplate';
 import { processLogoImage } from '@/lib/imageProcessor';
+import { requireAuth } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -24,6 +25,9 @@ async function getLogoDataUrl(): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  const { error: authError } = await requireAuth();
+  if (authError) return authError;
+
   try {
     const body = await req.json() as {
       questions: Question[];

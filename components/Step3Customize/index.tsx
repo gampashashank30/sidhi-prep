@@ -45,7 +45,7 @@ const PALETTE_32: string[] = [
   '#FCD34D', // gold
 ];
 
-interface SubjectSlice  { label: string; count: number; pct: number; color: string; }
+interface SubjectSlice { label: string; count: number; pct: number; color: string; }
 interface SubtopicSlice { label: string; count: number; pct: number; color: string; subjectColor: string; subjectLabel: string; }
 
 interface NestedSlices {
@@ -59,14 +59,14 @@ function buildNestedSlices(questions: Question[]): NestedSlices {
   const subjectMap = new Map<string, Map<string, number>>();
 
   for (const q of questions) {
-    const subject  = q.subjectPath[0] ?? 'Uncategorised';
+    const subject = q.subjectPath[0] ?? 'Uncategorised';
     const subtopic = q.subjectPath[1] ?? q.subjectPath[0] ?? 'General';
     if (!subjectMap.has(subject)) subjectMap.set(subject, new Map());
     const inner = subjectMap.get(subject)!;
     inner.set(subtopic, (inner.get(subtopic) ?? 0) + 1);
   }
 
-  const subjects: SubjectSlice[]   = [];
+  const subjects: SubjectSlice[] = [];
   const subtopics: SubtopicSlice[] = [];
 
   // Subject colors: stride of 4 across the palette for max contrast
@@ -121,8 +121,8 @@ function buildNestedSlices(questions: Question[]): NestedSlices {
 function buildArcPath(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number): string {
   const sweep = Math.min(endDeg - startDeg, 359.999);
   const large = sweep > 180 ? 1 : 0;
-  const toXY  = (r: number, deg: number) => ({ x: cx + r * Math.cos((deg * Math.PI) / 180), y: cy + r * Math.sin((deg * Math.PI) / 180) });
-  const s  = toXY(rOuter, startDeg); const e  = toXY(rOuter, startDeg + sweep);
+  const toXY = (r: number, deg: number) => ({ x: cx + r * Math.cos((deg * Math.PI) / 180), y: cy + r * Math.sin((deg * Math.PI) / 180) });
+  const s = toXY(rOuter, startDeg); const e = toXY(rOuter, startDeg + sweep);
   const si = toXY(rInner, startDeg); const ei = toXY(rInner, startDeg + sweep);
   return `M ${s.x} ${s.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${e.x} ${e.y} L ${ei.x} ${ei.y} A ${rInner} ${rInner} 0 ${large} 0 ${si.x} ${si.y} Z`;
 }
@@ -134,7 +134,7 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
   const [hovered, setHovered] = useState<{ ring: 'inner' | 'outer'; idx: number } | null>(null);
 
   const SIZE = 260; const CX = 130; const CY = 130;
-  const R_IN_OUTER  = 68;  const R_IN_INNER  = 42;   // inner: subjects
+  const R_IN_OUTER = 68; const R_IN_INNER = 42;   // inner: subjects
   const R_OUT_OUTER = 106; const R_OUT_INNER = 76;   // outer: subtopics (8pt gap)
 
   if (subjects.length === 0) return null;
@@ -179,7 +179,7 @@ function NestedDonutChart({ nested }: { nested: NestedSlices }) {
 
   const hoveredSlice = hovered?.ring === 'inner' ? subjects[hovered.idx]
     : hovered?.ring === 'outer' ? subtopics[hovered.idx] : null;
-  const centerColor  = hoveredSlice?.color ?? '#0F172A';
+  const centerColor = hoveredSlice?.color ?? '#0F172A';
 
   return (
     <div>
@@ -254,13 +254,13 @@ function AnalyticsSection({ questions, enabled, setEnabled, showDonut, setShowDo
   setShowBreakdown: (v: boolean) => void;
 }) {
   const nested = useMemo(() => buildNestedSlices(questions), [questions]);
-  const total  = questions.length;
+  const total = questions.length;
 
   return (
     <div style={{ borderRadius: '1.25rem', border: '1.5px solid transparent', backgroundImage: enabled ? 'linear-gradient(#fff,#fff), linear-gradient(135deg,#6366F1 0%,#8B5CF6 50%,#14B89A 100%)' : 'linear-gradient(#fff,#fff), linear-gradient(135deg,#E2E8F0,#E2E8F0)', backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box', padding: '1.25rem 1.375rem', boxShadow: enabled ? '0 6px 32px rgba(99,102,241,0.14)' : '0 1px 4px rgba(15,23,42,0.06)', transition: 'box-shadow 0.3s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: enabled ? '1.125rem' : 0 }}>
         <div style={{ width: '2.25rem', height: '2.25rem', borderRadius: '0.625rem', flexShrink: 0, background: enabled ? 'linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.15))' : 'rgba(99,102,241,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366F1', transition: 'background 0.3s' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /></svg>
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#0F172A', lineHeight: 1.3 }}>Topic Analytics</h3>
@@ -275,7 +275,7 @@ function AnalyticsSection({ questions, enabled, setEnabled, showDonut, setShowDo
         <div>
           {total === 0 ? (
             <div style={{ textAlign: 'center', padding: '2.25rem 1rem', background: 'rgba(99,102,241,0.04)', borderRadius: '1rem', border: '1.5px dashed rgba(99,102,241,0.2)' }}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 0.75rem' }}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 0.75rem' }}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /></svg>
               <p style={{ fontSize: '0.875rem', color: '#94A3B8', fontWeight: 500 }}>No questions selected</p>
               <p style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '0.25rem' }}>Go to Step 2 and select questions to see analytics</p>
             </div>
@@ -970,13 +970,13 @@ export default function Step3Customize() {
 
 
   const socialFields: Array<{ key: keyof PDFSettings['socialLinks']; label: string; placeholder: string }> = [
-    { key: 'instagram',      label: 'Instagram',          placeholder: 'https://instagram.com/...' },
-    { key: 'youtube',        label: 'YouTube',            placeholder: 'https://youtube.com/...' },
-    { key: 'telegram',       label: 'Telegram',           placeholder: 'https://t.me/...' },
-    { key: 'whatsapp',       label: 'WhatsApp Channel',   placeholder: 'https://whatsapp.com/channel/...' },
-    { key: 'playStore',      label: 'Google Play Store',  placeholder: 'https://play.google.com/...' },
-    { key: 'appStore',       label: 'Apple App Store',    placeholder: 'https://apps.apple.com/...' },
-    { key: 'microsoftStore', label: 'Microsoft Store',    placeholder: 'https://apps.microsoft.com/...' },
+    { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/...' },
+    { key: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/...' },
+    { key: 'telegram', label: 'Telegram', placeholder: 'https://t.me/...' },
+    { key: 'whatsapp', label: 'WhatsApp Channel', placeholder: 'https://whatsapp.com/channel/...' },
+    { key: 'playStore', label: 'Google Play Store', placeholder: 'https://play.google.com/...' },
+    { key: 'appStore', label: 'Apple App Store', placeholder: 'https://apps.apple.com/...' },
+    { key: 'microsoftStore', label: 'Microsoft Store', placeholder: 'https://apps.microsoft.com/...' },
   ];
 
   return (
@@ -1239,54 +1239,54 @@ export default function Step3Customize() {
                   </div>
                   {pdfSettings.cornerLogoEnabled && (
                     <>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.375rem', marginBottom: '0.625rem', padding: '0.5rem 0.625rem', background: 'rgba(99,102,241,0.07)', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.18)' }}>
-                    <svg style={{ width: '0.875rem', height: '0.875rem', color: '#6366F1', flexShrink: 0, marginTop: '0.1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                    </svg>
-                    <div>
-                      <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1', marginBottom: '0.15rem' }}>Recommended upload dimensions</p>
-                      <p style={{ fontSize: '0.68rem', color: '#475569', lineHeight: 1.6 }}>
-                        <strong>200 x 200 px minimum</strong> &middot; Square (1:1 ratio) &middot; PNG or JPG &middot; Max 2 MB
-                      </p>
-                      <p style={{ fontSize: '0.65rem', color: '#94A3B8', lineHeight: 1.5, marginTop: '0.1rem' }}>
-                        Each corner circle is <strong>16 x 16 mm</strong> in the PDF (~60 px at screen, ~189 px at 300 dpi print).
-                        Upload at 200 x 200 px or larger for sharp print quality.
-                      </p>
-                    </div>
-                  </div>
-                  {pdfSettings.cornerLogoDataUrl ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.625rem', background: 'white', borderRadius: '0.625rem', border: '1px solid #E2E8F0' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={pdfSettings.cornerLogoDataUrl} alt="Custom corner logo"
-                        style={{ width: '3rem', height: '3rem', objectFit: 'contain', borderRadius: '50%', border: `2px solid ${pdfSettings.primaryColor}`, background: pdfSettings.primaryColor, padding: '0.25rem', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>Custom corner logo set</p>
-                        <p style={{ fontSize: '0.67rem', color: '#94A3B8' }}>Shown in all 4 corner circles of the PDF border</p>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.375rem', marginBottom: '0.625rem', padding: '0.5rem 0.625rem', background: 'rgba(99,102,241,0.07)', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.18)' }}>
+                        <svg style={{ width: '0.875rem', height: '0.875rem', color: '#6366F1', flexShrink: 0, marginTop: '0.1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                        </svg>
+                        <div>
+                          <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6366F1', marginBottom: '0.15rem' }}>Recommended upload dimensions</p>
+                          <p style={{ fontSize: '0.68rem', color: '#475569', lineHeight: 1.6 }}>
+                            <strong>200 x 200 px minimum</strong> &middot; Square (1:1 ratio) &middot; PNG or JPG &middot; Max 2 MB
+                          </p>
+                          <p style={{ fontSize: '0.65rem', color: '#94A3B8', lineHeight: 1.5, marginTop: '0.1rem' }}>
+                            Each corner circle is <strong>16 x 16 mm</strong> in the PDF (~60 px at screen, ~189 px at 300 dpi print).
+                            Upload at 200 x 200 px or larger for sharp print quality.
+                          </p>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <button className="btn-ghost text-xs px-2 py-1" onClick={() => document.getElementById('corner-logo-upload')?.click()}>Change</button>
-                        <button className="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-600" onClick={() => update('cornerLogoDataUrl' as keyof PDFSettings, undefined as any)}>Remove</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label htmlFor="corner-logo-upload" className="btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                      Upload Corner Logo
-                      <span style={{ fontSize: '0.65rem', color: '#94A3B8', fontWeight: 400 }}>(200x200 px+, square)</span>
-                    </label>
-                  )}
-                  <input id="corner-logo-upload" type="file" accept="image/png,image/jpeg" className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      if (file.size > 2 * 1024 * 1024) { alert('Corner logo image must be under 2 MB.'); return; }
-                      const reader = new FileReader();
-                      reader.onloadend = () => update('cornerLogoDataUrl' as keyof PDFSettings, reader.result as any);
-                      reader.readAsDataURL(file);
-                      e.target.value = '';
-                    }} />
+                      {pdfSettings.cornerLogoDataUrl ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.625rem', background: 'white', borderRadius: '0.625rem', border: '1px solid #E2E8F0' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={pdfSettings.cornerLogoDataUrl} alt="Custom corner logo"
+                            style={{ width: '3rem', height: '3rem', objectFit: 'contain', borderRadius: '50%', border: `2px solid ${pdfSettings.primaryColor}`, background: pdfSettings.primaryColor, padding: '0.25rem', flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>Custom corner logo set</p>
+                            <p style={{ fontSize: '0.67rem', color: '#94A3B8' }}>Shown in all 4 corner circles of the PDF border</p>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <button className="btn-ghost text-xs px-2 py-1" onClick={() => document.getElementById('corner-logo-upload')?.click()}>Change</button>
+                            <button className="btn-ghost text-xs px-2 py-1 text-red-400 hover:text-red-600" onClick={() => update('cornerLogoDataUrl' as keyof PDFSettings, undefined as any)}>Remove</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label htmlFor="corner-logo-upload" className="btn-ghost text-xs px-3 py-2 cursor-pointer inline-flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                          </svg>
+                          Upload Corner Logo
+                          <span style={{ fontSize: '0.65rem', color: '#94A3B8', fontWeight: 400 }}>(200x200 px+, square)</span>
+                        </label>
+                      )}
+                      <input id="corner-logo-upload" type="file" accept="image/png,image/jpeg" className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) { alert('Corner logo image must be under 2 MB.'); return; }
+                          const reader = new FileReader();
+                          reader.onloadend = () => update('cornerLogoDataUrl' as keyof PDFSettings, reader.result as any);
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }} />
                     </>
                   )}
                 </div>
