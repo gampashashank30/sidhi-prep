@@ -1,19 +1,26 @@
 // lib/auth/email.ts
-// Resend-powered transactional email sending — SERVER-SIDE ONLY.
+// Nodemailer + Gmail SMTP transactional email sending — SERVER-SIDE ONLY.
 // NEVER import this in client components.
 
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-function getResendClient(): Resend {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error('RESEND_API_KEY is not set');
-  return new Resend(apiKey);
+function getTransporter() {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user) throw new Error('GMAIL_USER is not set');
+  if (!pass) throw new Error('GMAIL_APP_PASSWORD is not set');
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  });
 }
 
 function getFromEmail(): string {
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!from) throw new Error('RESEND_FROM_EMAIL is not set');
-  return from;
+  const user = process.env.GMAIL_USER;
+  if (!user) throw new Error('GMAIL_USER is not set');
+  const name = process.env.GMAIL_FROM_NAME ?? 'Siddhi Prep';
+  return `"${name}" <${user}>`;
 }
 
 function getAppUrl(): string {
@@ -70,7 +77,7 @@ export async function sendInviteEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/set-password?token=${rawToken}`;
-  const resend = getResendClient();
+  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">You're invited to Siddhi Prep</h2>
@@ -89,10 +96,10 @@ export async function sendInviteEmail(
     </div>
   `;
 
-  await resend.emails.send({
+  await transporter.sendMail({
     from: getFromEmail(),
     to: recipientEmail,
-    subject: 'You\'ve been invited to Siddhi Prep — Set your password',
+    subject: "You've been invited to Siddhi Prep — Set your password",
     html: baseEmailLayout(content, 'Set your password to access Siddhi Prep'),
   });
 }
@@ -104,7 +111,7 @@ export async function sendForgotPasswordEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/reset-password?token=${rawToken}`;
-  const resend = getResendClient();
+  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">Reset your password</h2>
@@ -124,7 +131,7 @@ export async function sendForgotPasswordEmail(
     <p style="margin:16px 0 0;font-size:13px;color:#94A3B8;">If you didn't request a password reset, you can safely ignore this email.</p>
   `;
 
-  await resend.emails.send({
+  await transporter.sendMail({
     from: getFromEmail(),
     to: recipientEmail,
     subject: 'Reset your Siddhi Prep password',
@@ -139,7 +146,7 @@ export async function sendAdminResetEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/reset-password?token=${rawToken}`;
-  const resend = getResendClient();
+  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">Your password has been reset</h2>
@@ -159,7 +166,7 @@ export async function sendAdminResetEmail(
     <p style="margin:16px 0 0;font-size:13px;color:#94A3B8;">If you did not expect this, please contact your administrator.</p>
   `;
 
-  await resend.emails.send({
+  await transporter.sendMail({
     from: getFromEmail(),
     to: recipientEmail,
     subject: 'Your Siddhi Prep password needs to be reset',
