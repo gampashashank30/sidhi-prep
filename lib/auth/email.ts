@@ -1,32 +1,51 @@
 // lib/auth/email.ts
-// Nodemailer + Gmail SMTP transactional email sending — SERVER-SIDE ONLY.
+// Brevo (formerly Sendinblue) HTTP API — SERVER-SIDE ONLY.
+// Uses fetch (HTTP), NOT SMTP — works on all hosting platforms including Render free tier.
 // NEVER import this in client components.
 
-import nodemailer from 'nodemailer';
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
-function getTransporter() {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  if (!user) throw new Error('GMAIL_USER is not set');
-  if (!pass) throw new Error('GMAIL_APP_PASSWORD is not set');
-
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  });
+function getBrevoKey(): string {
+  const key = process.env.BREVO_API_KEY;
+  if (!key) throw new Error('BREVO_API_KEY is not set');
+  return key;
 }
 
-function getFromEmail(): string {
-  const user = process.env.GMAIL_USER;
-  if (!user) throw new Error('GMAIL_USER is not set');
-  const name = process.env.GMAIL_FROM_NAME ?? 'Siddhi Prep';
-  return `"${name}" <${user}>`;
+function getFromEmail(): { name: string; email: string } {
+  const email = process.env.BREVO_FROM_EMAIL;
+  if (!email) throw new Error('BREVO_FROM_EMAIL is not set');
+  return { name: 'Siddhi Prep', email };
 }
 
 function getAppUrl(): string {
   const url = process.env.APP_URL;
   if (!url) throw new Error('APP_URL is not set');
-  return url.replace(/\/$/, ''); // strip trailing slash
+  return url.replace(/\/$/, '');
+}
+
+async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+  const apiKey = getBrevoKey();
+  const from = getFromEmail();
+
+  const res = await fetch(BREVO_API_URL, {
+    method: 'POST',
+    headers: {
+      'api-key': apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: from,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Brevo API error ${res.status}: ${err}`);
+  }
 }
 
 // ─── Email templates ──────────────────────────────────────────────────────────
@@ -77,7 +96,6 @@ export async function sendInviteEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/set-password?token=${rawToken}`;
-  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">You're invited to Siddhi Prep</h2>
@@ -96,12 +114,11 @@ export async function sendInviteEmail(
     </div>
   `;
 
-  await transporter.sendMail({
-    from: getFromEmail(),
-    to: recipientEmail,
-    subject: "You've been invited to Siddhi Prep — Set your password",
-    html: baseEmailLayout(content, 'Set your password to access Siddhi Prep'),
-  });
+  await sendEmail(
+    recipientEmail,
+    "You've been invited to Siddhi Prep — Set your password",
+    baseEmailLayout(content, 'Set your password to access Siddhi Prep')
+  );
 }
 
 // ─── 2. Forgot password email ─────────────────────────────────────────────────
@@ -111,7 +128,6 @@ export async function sendForgotPasswordEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/reset-password?token=${rawToken}`;
-  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">Reset your password</h2>
@@ -131,12 +147,11 @@ export async function sendForgotPasswordEmail(
     <p style="margin:16px 0 0;font-size:13px;color:#94A3B8;">If you didn't request a password reset, you can safely ignore this email.</p>
   `;
 
-  await transporter.sendMail({
-    from: getFromEmail(),
-    to: recipientEmail,
-    subject: 'Reset your Siddhi Prep password',
-    html: baseEmailLayout(content, 'Reset your Siddhi Prep password — link expires in 1 hour'),
-  });
+  await sendEmail(
+    recipientEmail,
+    'Reset your Siddhi Prep password',
+    baseEmailLayout(content, 'Reset your Siddhi Prep password — link expires in 1 hour')
+  );
 }
 
 // ─── 3. Admin-triggered password reset email ──────────────────────────────────
@@ -146,7 +161,6 @@ export async function sendAdminResetEmail(
   rawToken: string
 ): Promise<void> {
   const link = `${getAppUrl()}/reset-password?token=${rawToken}`;
-  const transporter = getTransporter();
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:700;">Your password has been reset</h2>
@@ -166,10 +180,9 @@ export async function sendAdminResetEmail(
     <p style="margin:16px 0 0;font-size:13px;color:#94A3B8;">If you did not expect this, please contact your administrator.</p>
   `;
 
-  await transporter.sendMail({
-    from: getFromEmail(),
-    to: recipientEmail,
-    subject: 'Your Siddhi Prep password needs to be reset',
-    html: baseEmailLayout(content, 'An admin has reset your Siddhi Prep password'),
-  });
+  await sendEmail(
+    recipientEmail,
+    'Your Siddhi Prep password needs to be reset',
+    baseEmailLayout(content, 'An admin has reset your Siddhi Prep password')
+  );
 }
