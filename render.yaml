@@ -10,7 +10,7 @@ services:
     region: singapore       # choose the closest region to your users
     branch: main
 
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start
 
     envVars:
