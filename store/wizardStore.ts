@@ -5,12 +5,20 @@ import { create } from 'zustand';
 import type { ParseResult, CoverSettings, PDFSettings, Question } from '@/lib/types';
 import { DEFAULT_PDF_SETTINGS } from '@/lib/constants';
 
+/** Per-file entry saved to the store so individual cards survive navigation. */
+export interface StoredFileEntry {
+  fileName: string;
+  result: ParseResult;
+}
+
 interface WizardState {
   currentStep: 1 | 2 | 3;
 
-  // Step 1
+  // Step 1 — merged result + per-file breakdown for card restoration
   parseResult: ParseResult | null;
   uploadedFileName: string | null;
+  /** Individual file results — used to restore per-file cards on Step 1 re-mount. */
+  fileResults: StoredFileEntry[];
 
   // Step 2
   coverSettings: CoverSettings | null;
@@ -25,6 +33,7 @@ interface WizardState {
   // Actions
   setStep: (step: 1 | 2 | 3) => void;
   setParseResult: (result: ParseResult, fileName: string) => void;
+  setFileResults: (entries: StoredFileEntry[]) => void;
   clearParseResult: () => void;
   setCoverSettings: (settings: CoverSettings | null) => void;
   setSelectedQuestions: (numbers: number[]) => void;
@@ -45,6 +54,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   // Step 1
   parseResult: null,
   uploadedFileName: null,
+  fileResults: [],
 
   // Step 2
   coverSettings: null,
@@ -70,9 +80,12 @@ export const useWizardStore = create<WizardState>((set, get) => ({
     });
   },
 
+  setFileResults: (entries) => set({ fileResults: entries }),
+
   clearParseResult: () => set({
     parseResult: null,
     uploadedFileName: null,
+    fileResults: [],
     selectedQuestionNumbers: [],
     coverSettings: null,
   }),

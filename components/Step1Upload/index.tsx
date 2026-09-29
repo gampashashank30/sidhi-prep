@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { useWizardStore } from '@/store/wizardStore';
+import type { StoredFileEntry } from '@/store/wizardStore';
 import type { ParseResult } from '@/lib/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -205,22 +206,20 @@ function FileCard({
 // ─── Step 1 Main ───────────────────────────────────────────────────────────────
 
 export default function Step1Upload() {
-  const { setParseResult, clearParseResult, setStep, parseResult, uploadedFileName } = useWizardStore();
+  const { setParseResult, setFileResults, clearParseResult, setStep, fileResults } = useWizardStore();
   const [dragActive, setDragActive] = useState(false);
 
-  // Restore file entries from the store when navigating back to Step 1.
-  // We create a synthetic "done" entry so the uploaded file list is not lost.
+  // Restore individual file cards from the store when navigating back to Step 1.
+  // We use the per-file breakdown (fileResults) so each card is independently removable.
   const [fileEntries, setFileEntries] = useState<FileEntry[]>(() => {
-    if (parseResult && uploadedFileName) {
-      return [
-        {
-          id: `restored-${Date.now()}`,
-          file: new File([], uploadedFileName),
-          status: 'done' as FileStatus,
-          result: parseResult,
-          progress: 100,
-        },
-      ];
+    if (fileResults.length > 0) {
+      return fileResults.map((fr: StoredFileEntry, i: number) => ({
+        id: `restored-${i}-${fr.fileName}`,
+        file: new File([], fr.fileName),
+        status: 'done' as FileStatus,
+        result: fr.result,
+        progress: 100,
+      }));
     }
     return [];
   });
@@ -314,6 +313,8 @@ export default function Step1Upload() {
       const merged = mergeResults(done.map((e) => ({ file: e.file, result: e.result! })));
       const nameLabel = done.length === 1 ? done[0].file.name : `${done.length} files`;
       setParseResult(merged, nameLabel);
+      // Save individual file breakdown so cards survive navigation
+      setFileResults(done.map((e) => ({ fileName: e.file.name, result: e.result! })));
     } else if (fileEntries.length === 0) {
       // All entries removed — clear the store so navigating back doesn't restore them
       clearParseResult();
