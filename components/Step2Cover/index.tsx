@@ -437,6 +437,7 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
           </div>
 
           {/* Correct Answer Badge */}
+          {q.answer && (
           <div style={{ margin: '0.5rem 0 0.375rem 0' }}>
             <span style={{
               background: 'var(--primary)', color: '#fff',
@@ -449,6 +450,7 @@ function QuestionCard({ q, displayNum, isSelected, onToggle }: {
               )}
             </span>
           </div>
+          )}
 
           {/* Full Explanation section */}
           <div style={{

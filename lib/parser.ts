@@ -287,6 +287,10 @@ export function parseQuestions(
         if (RE_ANY_OPT.test(stripTblTokens(next))) break;
         if (RE_ANSWER.test(stripTblTokens(next))) break;
         if (RE_QUESTION.test(stripTblTokens(next))) break;
+        // Also stop at metadata lines — important when Ans: is absent
+        if (RE_EXPLANATION.test(stripTblTokens(next))) break;
+        if (RE_SUBJECT.test(stripTblTokens(next))) break;
+        if (RE_DIFFICULTY.test(stripTblTokens(next))) break;
         if (isTableParagraph(next)) {
           const tm = next.trim().match(RE_TBL_STANDALONE)!;
           optionText += '\n' + (tableHtmlMap[tm[1]] ?? '');
@@ -308,20 +312,19 @@ export function parseQuestions(
       continue;
     }
 
-    // ── Parse Ans: ────────────────────────────────────────────────────────────
+    // ── Parse Ans: (optional — missing answer is a soft warning, question still emitted) ───────────
     let answer: 'A' | 'B' | 'C' | 'D' | null = null;
-    if (i >= paragraphs.length || !RE_ANSWER.test(paragraphs[i])) {
-      const got = i < paragraphs.length ? paragraphs[i].substring(0, 40) : '(end of document)';
-      errors.push({
-        questionNumber: qNumber,
-        message: `Question ${qNumber} is missing a valid "Ans:" line (A/B/C/D). Got: "${got}"`,
-      });
-      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
-      continue;
-    } else {
+    if (i < paragraphs.length && RE_ANSWER.test(paragraphs[i])) {
+      // Ans: line present with a valid A/B/C/D
       const m = paragraphs[i].match(RE_ANSWER)!;
       answer = m[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
       i++;
+    } else {
+      // Ans: line absent — soft warning only, PDF will hide the answer badge for this question
+      errors.push({
+        questionNumber: qNumber,
+        message: `Q${qNumber}: No answer (Ans: A/B/C/D) found — question will be included in the PDF without an answer badge. This will NOT block PDF generation.`,
+      });
     }
 
     // ── Metadata variables for this question ─────────────────────────────────

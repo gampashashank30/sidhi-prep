@@ -6,7 +6,7 @@ export type Question = {
   number: number;
   text: string;
   options: { A: string; B: string; C: string; D: string };
-  answer: 'A' | 'B' | 'C' | 'D';
+  answer: 'A' | 'B' | 'C' | 'D' | null;
   explanation: string;
   subjectPath: string[]; // e.g. ["GS", "History", "Art and Culture", "Classical Music"]
   difficulty: 'Easy' | 'Medium' | 'Hard' | null;

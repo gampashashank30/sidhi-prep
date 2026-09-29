@@ -562,7 +562,7 @@ function renderQuestionBlock(q: Question, settings: PDFSettings, displayNumber: 
            </div>`).join('')}
        </div>`;
 
-  const answerBadge = settings.showAnswer
+  const answerBadge = (settings.showAnswer && q.answer)
     ? `<span style="background:${primaryColor};color:white;padding:1px 7px;border-radius:8px;font-size:7pt;font-weight:700;white-space:nowrap;flex-shrink:0;">Ans: ${q.answer}</span>`
     : '';
 
@@ -724,9 +724,11 @@ function renderExplanationEntry(q: Question, primaryColor: string, accentColor: 
     <div style="font-weight:700;color:${primaryColor};font-size:9pt;margin-bottom:4px;">Q${displayNumber} — Explanation</div>
     ${explanationHtml}
     ${expImagesHtml}
-    <div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
+    ${q.answer
+      ? `<div style="background:${primaryColor}10;border-left:2px solid ${primaryColor};padding:3px 7px;margin-bottom:5px;font-size:8pt;">
       <strong>Correct Answer:</strong> ${q.answer}) ${renderMath(stripMarkdown(q.options[q.answer]))}
-    </div>
+    </div>`
+      : ''}
     <a href="#q-${q.number}" style="color:${accentColor};font-size:7.5pt;text-decoration:none;font-weight:600;">← Back to Question ${displayNumber}</a>
   </div>`;
 }
