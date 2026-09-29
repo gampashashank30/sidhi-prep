@@ -395,7 +395,7 @@ export function parseQuestions(
     }
 
 
-    // ── Parse Subject: (optional — missing/empty subject keeps question in PDF without topic grouping)
+    // ── Parse Subject: (REQUIRED — empty/missing Subject: means the question is skipped entirely)
     if (i < paragraphs.length && RE_SUBJECT.test(paragraphs[i])) {
       const m = paragraphs[i].match(RE_SUBJECT)!;
       let rawSubj = m[1];
@@ -411,18 +411,30 @@ export function parseQuestions(
       subjectPath = parseSubjectPath(rawSubj);
       i++;
       if (subjectPath.length === 0) {
-        // Subject line present but empty/unparseable — soft warning, question still emitted
+        // Subject: line present but empty — skip this question (hard)
         errors.push({
           questionNumber: qNumber,
-          message: `Q${qNumber}: Subject: field is empty — question will appear without a topic heading or badge.`,
+          message: `Q${qNumber} skipped — Subject: field is empty. Fill in the subject to include this question.`,
         });
+        // If inside a direction block, clear it so the passage doesn't bleed into other questions
+        if (pendingDirection && qNumber >= pendingDirection.startQ && qNumber <= pendingDirection.endQ) {
+          pendingDirection = null;
+        }
+        while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
+        continue;
       }
     } else if (subjectPath.length === 0) {
-      // No Subject: line at all and not extracted inline — soft warning
+      // No Subject: line at all — skip this question (hard)
       errors.push({
         questionNumber: qNumber,
-        message: `Q${qNumber}: Subject: line is missing — question will appear without a topic heading or badge.`,
+        message: `Q${qNumber} skipped — Subject: line is missing entirely. Add a Subject: line to include this question.`,
       });
+      // If inside a direction block, clear it so the passage doesn't bleed into other questions
+      if (pendingDirection && qNumber >= pendingDirection.startQ && qNumber <= pendingDirection.endQ) {
+        pendingDirection = null;
+      }
+      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
+      continue;
     }
 
     // ── Parse Difficulty: (optional — missing difficulty keeps question in PDF without a badge)
