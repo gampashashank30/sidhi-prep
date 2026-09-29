@@ -205,7 +205,7 @@ function FileCard({
 // ─── Step 1 Main ───────────────────────────────────────────────────────────────
 
 export default function Step1Upload() {
-  const { setParseResult, setStep, parseResult, uploadedFileName } = useWizardStore();
+  const { setParseResult, clearParseResult, setStep, parseResult, uploadedFileName } = useWizardStore();
   const [dragActive, setDragActive] = useState(false);
 
   // Restore file entries from the store when navigating back to Step 1.
@@ -314,6 +314,9 @@ export default function Step1Upload() {
       const merged = mergeResults(done.map((e) => ({ file: e.file, result: e.result! })));
       const nameLabel = done.length === 1 ? done[0].file.name : `${done.length} files`;
       setParseResult(merged, nameLabel);
+    } else if (fileEntries.length === 0) {
+      // All entries removed — clear the store so navigating back doesn't restore them
+      clearParseResult();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileEntries]);

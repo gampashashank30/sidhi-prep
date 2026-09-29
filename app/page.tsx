@@ -48,7 +48,7 @@ export default function Home() {
             <h1 style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '1.25rem', color: '#fff', lineHeight: 1 }}>
               Siddhi
             </h1>
-            <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.65)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: '0.125rem' }}>
+            <p style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '0.6875rem', color: 'rgba(255,255,255,0.65)', letterSpacing: '0.04em', marginTop: '0.125rem' }}>
               Question Bank PDF Generator
             </p>
           </div>
