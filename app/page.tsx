@@ -45,11 +45,16 @@ export default function Home() {
 
           {/* Brand wordmark */}
           <div>
-            <h1 style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '1.25rem', color: '#fff', lineHeight: 1 }}>
-              Siddhi
-            </h1>
-            <p style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '0.6875rem', color: 'rgba(255,255,255,0.65)', letterSpacing: '0.04em', marginTop: '0.125rem' }}>
-              Question Bank PDF Generator
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', lineHeight: 1 }}>
+              <h1 style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '1.25rem', color: '#fff', margin: 0 }}>
+                Siddhi
+              </h1>
+              <span style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '1.25rem', color: '#fff' }}>
+                Question Bank
+              </span>
+            </div>
+            <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em', marginTop: '0.2rem' }}>
+              PDF Generator
             </p>
           </div>
 

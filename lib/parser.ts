@@ -312,6 +312,16 @@ export function parseQuestions(
       continue;
     }
 
+    // Check for unexpected 5th option (E) after options A–D
+    if (i < paragraphs.length && RE_OPT_E.test(paragraphs[i])) {
+      errors.push({
+        questionNumber: qNumber,
+        message: `Question ${qNumber} has an unexpected 5th option (E) — only A–D are allowed`,
+      });
+      while (i < paragraphs.length && !RE_QUESTION.test(paragraphs[i])) i++;
+      continue;
+    }
+
     // ── Parse Ans: (optional — missing answer is a soft warning, question still emitted) ───────────
     let answer: 'A' | 'B' | 'C' | 'D' | null = null;
     if (i < paragraphs.length && RE_ANSWER.test(paragraphs[i])) {

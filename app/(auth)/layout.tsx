@@ -53,20 +53,33 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Siddhi" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
-          <h1
-            style={{
-              fontFamily: 'Georgia, serif',
-              fontStyle: 'italic',
-              fontWeight: 700,
-              fontSize: '1.5rem',
-              color: '#fff',
-              marginBottom: '0.25rem',
-            }}
-          >
-            Siddhi
-          </h1>
-          <p style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, fontSize: '0.6875rem', color: 'rgba(255,255,255,0.65)', letterSpacing: '0.04em' }}>
-            Question Bank PDF Generator
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+            <h1
+              style={{
+                fontFamily: 'Georgia, serif',
+                fontStyle: 'italic',
+                fontWeight: 700,
+                fontSize: '1.5rem',
+                color: '#fff',
+                margin: 0,
+              }}
+            >
+              Siddhi
+            </h1>
+            <span
+              style={{
+                fontFamily: 'Georgia, serif',
+                fontStyle: 'italic',
+                fontWeight: 700,
+                fontSize: '1.5rem',
+                color: '#fff',
+              }}
+            >
+              Question Bank
+            </span>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em' }}>
+            PDF Generator
           </p>
         </div>
 

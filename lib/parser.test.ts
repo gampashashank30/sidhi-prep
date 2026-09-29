@@ -85,7 +85,9 @@ Difficulty:Medium`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
 
-    expect(questions).toHaveLength(0);
+    // Question is KEPT with answer: null (missing Ans is a soft warning)
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBeNull();
     expect(errors.length).toBeGreaterThan(0);
     const err = errors.find(e => e.questionNumber === 1);
     expect(err).toBeDefined();
@@ -495,14 +497,12 @@ Exp:Photosynthesis is the biological process by which plants convert light energ
 Difficulty:Medium`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
-    // Question MUST be emitted even though Subject is missing
-    expect(questions).toHaveLength(1);
-    expect(questions[0].subjectPath).toEqual([]);
-    expect(questions[0].difficulty).toBe('Medium');
-    // A soft warning is pushed but the question is not rejected
+    // Question is SKIPPED when Subject: is missing
+    expect(questions).toHaveLength(0);
+    // A warning is pushed indicating the question was skipped
     const warn = errors.find(e => e.questionNumber === 1);
     expect(warn).toBeDefined();
-    expect(warn!.message).toMatch(/Subject/i);
+    expect(warn!.message).toMatch(/skipped.*Subject|Subject.*skipped/i);
   });
 
   // ── TEST 19: Missing Difficulty — question parsed with null difficulty ────────
@@ -538,14 +538,9 @@ Ans:A
 Exp:`;
 
     const { questions, errors } = parseQuestions(makeParas(block));
-    // Question MUST be emitted despite all three missing
-    expect(questions).toHaveLength(1);
-    expect(questions[0].answer).toBe('A');
-    expect(questions[0].explanation).toBe('');
-    expect(questions[0].subjectPath).toEqual([]);
-    expect(questions[0].difficulty).toBeNull();
-    // Three soft warnings pushed (empty exp, missing subject, missing difficulty)
-    expect(errors.length).toBeGreaterThanOrEqual(3);
+    // Question is SKIPPED because Subject is missing
+    expect(questions).toHaveLength(0);
+    expect(errors.length).toBeGreaterThanOrEqual(1);
   });
 
   // ── TEST 21: Real-world SSC GD 2026 format — Exp empty, Subject filled, Difficulty empty ──

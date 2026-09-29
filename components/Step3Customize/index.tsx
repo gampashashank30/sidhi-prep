@@ -1036,13 +1036,13 @@ export default function Step3Customize() {
               </div>
               <div>
                 <label htmlFor="header-label" className="block text-sm font-semibold text-gray-800 mb-1">
-                  Right label <span className="text-gray-400 font-normal">(small caps)</span>
+                  Right label <span className="text-gray-400 font-normal">(italic)</span>
                 </label>
                 <input
                   id="header-label"
                   type="text"
                   className="form-input w-full"
-                  placeholder="e.g. QUESTION BANK"
+                  placeholder="e.g. Question Bank"
                   maxLength={40}
                   value={pdfSettings.headerLabel ?? ''}
                   onChange={e => update('headerLabel' as keyof PDFSettings, e.target.value as any)}

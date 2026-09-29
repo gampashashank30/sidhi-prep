@@ -67,8 +67,8 @@ function baseEmailLayout(content: string, previewText: string): string {
           <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#0F3D6E 0%,#1B5EA7 55%,#1d7ad4 75%,#14B89A 100%);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
-              <h1 style="margin:0;font-family:Georgia,serif;font-style:italic;font-size:28px;color:#fff;font-weight:700;letter-spacing:-0.5px;">Siddhi</h1>
-              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.65);letter-spacing:2px;text-transform:uppercase;">Question Bank PDF Generator</p>
+              <h1 style="margin:0;font-family:Georgia,serif;font-style:italic;font-size:28px;color:#fff;font-weight:700;letter-spacing:-0.5px;">Siddhi <span style="font-family:Georgia,serif;font-style:italic;font-size:28px;color:#fff;font-weight:700;">Question Bank</span></h1>
+              <p style="margin:6px 0 0;font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:1px;text-transform:uppercase;">PDF Generator</p>
             </td>
           </tr>
           <!-- Body -->

@@ -156,7 +156,10 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
 
   // ── Header bar ──────────────────────────────────────────────────────────────
   const headerTitle = settings.headerTitle?.trim() || 'Siddhi';
-  const headerLabel = settings.headerLabel?.trim() || 'QUESTION BANK';
+  const rawHeaderLabel = settings.headerLabel?.trim();
+  const headerLabel = rawHeaderLabel && rawHeaderLabel.toUpperCase() !== 'QUESTION BANK'
+    ? rawHeaderLabel
+    : 'Question Bank';
   parts.push(`
     <div class="running-header" style="
       position:fixed;
@@ -179,7 +182,7 @@ function renderFixedElements(settings: PDFSettings, logoDataUrl: string | null, 
     ">
       <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">${escHtml(headerTitle)}</span>
       <span style="flex:1;"></span>
-      <span style="font-size:6.5pt;opacity:0.75;font-weight:600;letter-spacing:1.5px;">${escHtml(headerLabel)}</span>
+      <span style="font-family:Georgia,serif;font-style:italic;font-size:11pt;">${escHtml(headerLabel)}</span>
     </div>`);
 
   // ── Footer bar — social icons centered, page number in bottom-right ──────────
@@ -837,7 +840,7 @@ function renderCoverSection(coverSettings: CoverSettings | null, layout: Layout)
     inner = `<div style="${overlayStyle}background:linear-gradient(150deg,#0F3D6E 0%,#1B5EA7 55%,#14B89A 100%);display:flex;align-items:center;justify-content:center;">
       <div style="text-align:center;color:white;">
         <div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Siddhi</div>
-        <div style="font-size:13pt;opacity:0.8;letter-spacing:3px;text-transform:uppercase;">Question Bank</div>
+        <div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Question Bank</div>
       </div>
     </div>`;
   } else {
@@ -1675,7 +1678,7 @@ export function buildCoverOnlyHTML(opts: TemplateOptions): string {
 
   let coverBody: string;
   if (!coverSettings) {
-    coverBody = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(150deg,#0F3D6E 0%,#1B5EA7 55%,#14B89A 100%);display:flex;align-items:center;justify-content:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><div style="text-align:center;color:white;"><div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Siddhi</div><div style="font-size:13pt;opacity:0.8;letter-spacing:3px;text-transform:uppercase;">Question Bank</div></div></div>`;
+    coverBody = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(150deg,#0F3D6E 0%,#1B5EA7 55%,#14B89A 100%);display:flex;align-items:center;justify-content:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><div style="text-align:center;color:white;"><div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;margin-bottom:8px;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Siddhi</div><div style="font-size:30pt;font-weight:700;font-family:Georgia,serif;font-style:italic;text-shadow:0 2px 12px rgba(0,0,0,0.3);">Question Bank</div></div></div>`;
   } else {
     const px = Math.round(coverSettings.focalX * 100) + '%';
     const py = Math.round(coverSettings.focalY * 100) + '%';

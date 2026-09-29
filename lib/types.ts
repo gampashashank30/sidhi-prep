@@ -56,7 +56,7 @@ export type BorderStyle = 'solid' | 'double' | 'dashed';
 export type PDFSettings = {
   // 5.0 Header text (editable in Step 3)
   headerTitle?: string;        // left side italic text, default "Siddhi"
-  headerLabel?: string;        // right side small-caps label, default "QUESTION BANK"
+  headerLabel?: string;        // right side italic text, default "Question Bank"
 
   // 5.0b Corner logo (4 corners of the page border)
   cornerLogoEnabled: boolean;  // show or hide corner logo circles
