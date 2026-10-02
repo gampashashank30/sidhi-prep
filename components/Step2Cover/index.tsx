@@ -571,13 +571,40 @@ export default function Step2Cover() {
     return order.filter(d => found.has(d));
   }, [questions]);
 
-  const [activeDiffs, setActiveDiffs] = useState<Set<Difficulty>>(() => new Set(availableDifficulties));
+  const [activeDiffs, setActiveDiffs] = useState<Set<Difficulty>>(() => {
+    // Derive which difficulties are currently "active" from what's actually
+    // selected in the store. This keeps the filter buttons in sync when the
+    // component re-mounts after the user navigates away (e.g. Step 3 → Step 2).
+    const sel = new Set(selectedQuestionNumbers);
+    const active = new Set<Difficulty>();
+    for (const q of questions) {
+      if (sel.has(q.number) && q.difficulty) {
+        active.add(q.difficulty as Difficulty);
+      }
+    }
+    // If every difficulty has at least one selected question → all active.
+    // If the derived set is empty (nothing selected at all) → show all as active
+    // so the UI doesn't look broken before the user has made any choice.
+    return active.size > 0 ? active : new Set(availableDifficulties);
+  });
+
   const prevAvailable = useRef(availableDifficulties);
   React.useEffect(() => {
+    // Only reset when the available difficulty list itself changes (i.e. a new
+    // document was uploaded), NOT on every re-mount from navigation.
     if (prevAvailable.current !== availableDifficulties) {
       prevAvailable.current = availableDifficulties;
-      setActiveDiffs(new Set(availableDifficulties));
+      // Re-derive from store on doc change too
+      const sel = new Set(selectedQuestionNumbers);
+      const active = new Set<Difficulty>();
+      for (const q of questions) {
+        if (sel.has(q.number) && q.difficulty) {
+          active.add(q.difficulty as Difficulty);
+        }
+      }
+      setActiveDiffs(active.size > 0 ? active : new Set(availableDifficulties));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableDifficulties]);
 
   const toggleDifficulty = useCallback((diff: Difficulty) => {
