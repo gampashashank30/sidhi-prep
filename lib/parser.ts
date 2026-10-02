@@ -77,6 +77,9 @@ const RE_OPT_E     = /^(?:\*\*|\*|__|_)?E\./;           // detect unexpected 5th
 const RE_ANY_OPT   = /^(?:\*\*|\*|__|_)?[A-E]\./;       // generic option-like line
 // Accept: Ans:A  |  Ans: A  |  Answer: A  |  Ans.A  |  Answer.A  (case-insensitive)
 const RE_ANSWER    = /^(?:\*\*|\*|__|_)?(?:Ans(?:wer)?)[:.\s]\s*(?:\*\*|\*|__|_)?([A-D])(?:\*\*|\*|__|_)?\s*$/i;
+// Matches any Ans:/Answer: header even when the letter is absent or on the next line.
+// Used ONLY as a boundary guard so bare "Ans:" never leaks into option text.
+const RE_ANSWER_PREFIX = /^(?:\*\*|\*|__|_)?Ans(?:wer)?\s*[:.]/i;
 const RE_EXPLANATION = /^(?:\*\*|\*|__|_)?Exp:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_SUBJECT   = /^(?:\*\*|\*|__|_)?Subject:(?:\*\*|\*|__|_)?(.*)$/i;
 const RE_DIFFICULTY = /^(?:\*\*|\*|__|_)?Difficulty:\s*(?:\*\*|\*|__|_)?([A-Za-z\s]+)(?:\*\*|\*|__|_)?\s*$/i;
@@ -286,6 +289,8 @@ export function parseQuestions(
         const next = paragraphs[i];
         if (RE_ANY_OPT.test(stripTblTokens(next))) break;
         if (RE_ANSWER.test(stripTblTokens(next))) break;
+        // Also stop on a bare "Ans:" header (letter absent or on the next line)
+        if (RE_ANSWER_PREFIX.test(stripTblTokens(next))) break;
         if (RE_QUESTION.test(stripTblTokens(next))) break;
         // Also stop at metadata lines — important when Ans: is absent
         if (RE_EXPLANATION.test(stripTblTokens(next))) break;
@@ -325,12 +330,30 @@ export function parseQuestions(
     // ── Parse Ans: (optional — missing answer is a soft warning, question still emitted) ───────────
     let answer: 'A' | 'B' | 'C' | 'D' | null = null;
     if (i < paragraphs.length && RE_ANSWER.test(paragraphs[i])) {
-      // Ans: line present with a valid A/B/C/D
+      // Normal case: "Ans:C" or "Ans: C" — letter on the same line
       const m = paragraphs[i].match(RE_ANSWER)!;
       answer = m[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
       i++;
+    } else if (i < paragraphs.length && RE_ANSWER_PREFIX.test(paragraphs[i])) {
+      // "Ans:" header present but letter is absent on this line.
+      // Consume the header line, then check the very next line for a bare letter.
+      i++;
+      if (
+        i < paragraphs.length &&
+        /^(?:\*\*|\*|__|_)?\(?([A-D])\)?(?:\*\*|\*|__|_)?\s*$/i.test(paragraphs[i].trim())
+      ) {
+        const m = paragraphs[i].trim().match(/([A-D])/i)!;
+        answer = m[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
+        i++;
+      } else {
+        // "Ans:" header found but no valid letter follows — soft warning
+        errors.push({
+          questionNumber: qNumber,
+          message: `Q${qNumber}: 'Ans:' header found but no answer letter (A/B/C/D) provided — question will be included without an answer badge. This will NOT block PDF generation.`,
+        });
+      }
     } else {
-      // Ans: line absent — soft warning only, PDF will hide the answer badge for this question
+      // Ans: line absent entirely — soft warning only
       errors.push({
         questionNumber: qNumber,
         message: `Q${qNumber}: No answer (Ans: A/B/C/D) found — question will be included in the PDF without an answer badge. This will NOT block PDF generation.`,

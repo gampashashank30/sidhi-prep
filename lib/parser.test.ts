@@ -608,7 +608,83 @@ Difficulty:`;
     expect(questions.map(q => q.number)).toEqual([1, 2, 3]);
   });
 
+  // ── TEST 22: Bare "Ans:" with the letter on the very next line ──────────────
+  it('parses a question where the answer letter is on the line after "Ans:"', () => {
+    const block = `Q1.Select the most appropriate antonym of the given word: Placatory
+A.Pacifying
+B.Soothing
+C.Aggravating
+D.Conciliatory
+Ans:
+C
+Exp:Aggravating is the antonym of Placatory.
+Subject:GS > English > Vocabulary
+Difficulty:Easy`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+
+    // Question MUST be emitted and answer resolved to C
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBe('C');
+
+    // Option D must NOT contain "Ans:" — it was correctly treated as a boundary
+    expect(questions[0].options.D).toBe('Conciliatory');
+    expect(questions[0].options.D).not.toContain('Ans');
+
+    // No fatal errors — only soft warnings at most (none if format is clean)
+    const fatalErrors = errors.filter(e => e.message.toLowerCase().includes('skipped'));
+    expect(fatalErrors).toHaveLength(0);
+  });
+
+  // ── TEST 23: Bare "Ans:" with NO letter at all (genuinely missing) ──────────
+  it('emits a soft warning when "Ans:" header has no letter at all', () => {
+    const block = `Q1.Select the most appropriate antonym of the given word: Placatory
+A.Pacifying
+B.Soothing
+C.Aggravating
+D.Conciliatory
+Ans:
+Exp:Aggravating is the antonym of Placatory.
+Subject:GS > English > Vocabulary
+Difficulty:Easy`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+
+    // Question MUST still be emitted
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBeNull();
+
+    // Option D must NOT swallow "Ans:" into its text
+    expect(questions[0].options.D).toBe('Conciliatory');
+    expect(questions[0].options.D).not.toContain('Ans');
+
+    // A soft warning about the missing letter must be present
+    const warn = errors.find(e => e.questionNumber === 1 && /Ans/i.test(e.message));
+    expect(warn).toBeDefined();
+  });
+
+  // ── TEST 24: Normal "Ans:C" is still unaffected ─────────────────────────────
+  it('correctly parses a normal "Ans:C" on the same line (regression guard)', () => {
+    const block = `Q1.Select the most appropriate antonym of the given word: Placatory
+A.Pacifying
+B.Soothing
+C.Aggravating
+D.Conciliatory
+Ans:C
+Exp:Aggravating is the antonym of Placatory.
+Subject:GS > English > Vocabulary
+Difficulty:Easy`;
+
+    const { questions, errors } = parseQuestions(makeParas(block));
+
+    expect(questions).toHaveLength(1);
+    expect(questions[0].answer).toBe('C');
+    expect(questions[0].options.D).toBe('Conciliatory');
+    expect(errors).toHaveLength(0);
+  });
+
 });
+
 
 describe('normalizeMathEquations', () => {
   it('auto-wraps bare LaTeX commands like \\sqrt{3} : \\sqrt{2}', () => {
